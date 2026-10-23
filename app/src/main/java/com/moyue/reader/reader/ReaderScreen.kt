@@ -12,10 +12,12 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.view.KeyEvent
 import android.view.WindowManager
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,9 +28,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
@@ -52,6 +61,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -62,7 +72,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.moyue.reader.data.repo.ClickZone
 import com.moyue.reader.data.repo.PageAnim
+import com.moyue.reader.data.repo.ReadMode
 import com.moyue.reader.data.repo.ReaderThemeKind
 import com.moyue.reader.di.Graph
 import kotlinx.coroutines.delay
@@ -70,6 +82,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 @Composable
 fun ReaderScreen(onBack: () -> Unit) {
@@ -109,17 +122,18 @@ fun ReaderScreen(onBack: () -> Unit) {
         spec?.let { vm.applySpec(it) }
     }
 
-    // ---------- Pager ----------
+    val scrollState = rememberScrollState()
+
+    // ---------- 翻页（PAGE 模式用 Pager） ----------
     val pagerState = rememberPagerState(initialPage = 0) { ui.pages.size }
 
-    // VM 侧页码变化（恢复进度/跳转/换章）时同步到 Pager
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            vm.onPageSettled(page)
+            if (prefs.readMode == ReadMode.PAGE) vm.onPageSettled(page)
         }
     }
     LaunchedEffect(ui.pages, ui.pageIdx) {
-        if (ui.pages.isNotEmpty() &&
+        if (prefs.readMode == ReadMode.PAGE && ui.pages.isNotEmpty() &&
             pagerState.settledPage != ui.pageIdx &&
             !pagerState.isScrollInProgress
         ) {
@@ -137,6 +151,20 @@ fun ReaderScreen(onBack: () -> Unit) {
             } else {
                 pagerState.animateScrollToPage(target)
             }
+        }
+    }
+
+    /** 音量键/点击 共用的翻页入口：PAGE 模式翻页，SCROLL 模式按页滚动 */
+    fun pageAction(dir: Int) {
+        if (prefs.readMode == ReadMode.SCROLL) {
+            scope.launch {
+                val pageH = textAreaSize.height.toFloat()
+                if (pageH > 0f) {
+                    scrollState.animateScrollBy(dir * pageH)
+                }
+            }
+        } else {
+            turnPage(dir)
         }
     }
 
@@ -169,23 +197,16 @@ fun ReaderScreen(onBack: () -> Unit) {
         }
     }
 
-    // ---------- 沉浸式 ----------
+    // ---------- 沉浸式：阅读期间（含菜单打开）始终保持全屏，避免系统栏弹出遮挡菜单 ----------
     val view = LocalView.current
-    DisposableEffect(ui.menuVisible) {
+    DisposableEffect(Unit) {
         val window = activity?.window
         if (window != null) {
             val controller = WindowCompat.getInsetsController(window, view)
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (ui.menuVisible) {
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            } else {
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-            }
+            controller.hide(WindowInsetsCompat.Type.systemBars())
         }
-        onDispose { }
-    }
-    DisposableEffect(Unit) {
         onDispose {
             activity?.window?.let { w ->
                 WindowCompat.getInsetsController(w, view)
@@ -218,16 +239,16 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 
     // ---------- 音量键翻页 ----------
-    DisposableEffect(prefs.volumeKeyTurn) {
+    DisposableEffect(prefs.volumeKeyTurn, prefs.readMode) {
         if (prefs.volumeKeyTurn) {
             Graph.volumeKeyHandler = { keyCode ->
                 when (keyCode) {
                     KeyEvent.KEYCODE_VOLUME_UP -> {
-                        turnPage(-1)
+                        pageAction(-1)
                         true
                     }
                     KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                        turnPage(1)
+                        pageAction(1)
                         true
                     }
                     else -> false
@@ -237,9 +258,7 @@ fun ReaderScreen(onBack: () -> Unit) {
             Graph.volumeKeyHandler = null
         }
         onDispose {
-            if (Graph.volumeKeyHandler != null && prefs.volumeKeyTurn) {
-                Graph.volumeKeyHandler = null
-            }
+            Graph.volumeKeyHandler = null
         }
     }
 
@@ -260,19 +279,34 @@ fun ReaderScreen(onBack: () -> Unit) {
                     .fillMaxSize()
                     .onSizeChanged { textAreaSize = it }
             ) {
-                if (ui.loading && ui.pages.isEmpty()) {
-                    CircularProgressIndicator(
+                when {
+                    ui.loading && ui.pages.isEmpty() -> CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
                         color = palette.secondary
                     )
-                } else if (ui.pages.isEmpty() && ui.book == null) {
-                    Text(
+
+                    ui.pages.isEmpty() && ui.book == null -> Text(
                         "书籍不存在或已删除",
                         color = palette.secondary,
                         modifier = Modifier.align(Alignment.Center)
                     )
-                } else {
-                    HorizontalPager(
+
+                    prefs.readMode == ReadMode.SCROLL -> ScrollReaderContent(
+                        ui = ui,
+                        vm = vm,
+                        scrollState = scrollState,
+                        pageHeightPx = textAreaSize.height,
+                        textSizePx = textSizePx,
+                        serif = prefs.serif,
+                        lineSpacing = prefs.lineSpacing,
+                        widthPx = textAreaSize.width,
+                        textColor = palette.text,
+                        accentColor = palette.secondary,
+                        hasPrev = ui.chapterIdx > 0,
+                        hasNext = ui.chapterIdx < ui.chapters.size - 1
+                    )
+
+                    else -> HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
                         beyondViewportPageCount = 1
@@ -312,23 +346,31 @@ fun ReaderScreen(onBack: () -> Unit) {
                 .padding(horizontal = padH + 4.dp, vertical = 4.dp)
         )
 
-        // 点击区域
+        // 点击层
         Box(
             Modifier
                 .fillMaxSize()
-                .pointerInput(prefs.tapTurn, ui.menuVisible) {
+                .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible) {
                     detectTapGestures { offset ->
                         if (ui.menuVisible) {
                             vm.setMenuVisible(false)
                             return@detectTapGestures
                         }
-                        if (!prefs.tapTurn) {
+                        if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {
                             vm.toggleMenu()
-                        } else {
-                            val w = size.width
-                            when {
-                                offset.x < w * 0.28f -> turnPage(-1)
-                                offset.x > w * 0.72f -> turnPage(1)
+                            return@detectTapGestures
+                        }
+                        val w = size.width
+                        val h = size.height
+                        when (prefs.tapZone) {
+                            ClickZone.TOP_BOTTOM -> when {
+                                offset.y < h * 0.3f -> pageAction(-1)
+                                offset.y > h * 0.7f -> pageAction(1)
+                                else -> vm.toggleMenu()
+                            }
+                            else -> when {
+                                offset.x < w * 0.28f -> pageAction(-1)
+                                offset.x > w * 0.72f -> pageAction(1)
                                 else -> vm.toggleMenu()
                             }
                         }
@@ -347,9 +389,101 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 }
 
-/** 用与分页完全相同的 StaticLayout 参数渲染一页，保证所见即所排 */
+/** 上下滚动阅读模式：页面纵向连续堆叠，章节首尾提供上/下一章入口 */
 @Composable
-private fun PageCanvas(
+private fun ScrollReaderContent(
+    ui: ReaderViewModel.UiState,
+    vm: ReaderViewModel,
+    scrollState: androidx.compose.foundation.ScrollState,
+    pageHeightPx: Int,
+    textSizePx: Float,
+    serif: Boolean,
+    lineSpacing: Float,
+    widthPx: Int,
+    textColor: Color,
+    accentColor: Color,
+    hasPrev: Boolean,
+    hasNext: Boolean
+) {
+    // 进度跟踪：当前页 = 视口中间可见的页
+    LaunchedEffect(scrollState, pageHeightPx) {
+        snapshotFlow { scrollState.value }.collect { v ->
+            if (pageHeightPx > 0 && ui.pages.isNotEmpty()) {
+                val idx = (v + pageHeightPx / 2) / pageHeightPx
+                vm.onPageSettled(idx.coerceIn(0, ui.pages.size - 1))
+            }
+        }
+    }
+    // 进度恢复：分页完成或跳转后滚动到目标页（与当前差异大于半页才跳）
+    LaunchedEffect(ui.pages, ui.pageIdx, pageHeightPx) {
+        if (ui.pages.isNotEmpty() && pageHeightPx > 0 && !scrollState.isScrollInProgress) {
+            val target = ui.pageIdx * pageHeightPx
+            if (abs(scrollState.value - target) > pageHeightPx / 2) {
+                scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
+            }
+        }
+    }
+
+    val density = LocalDensity.current
+    val pageHeightDp = with(density) { pageHeightPx.toDp() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+    ) {
+        if (hasPrev) {
+            ScrollChapterButton("上一章", accentColor) { vm.prevChapter() }
+        }
+        ui.pages.forEachIndexed { idx, page ->
+            StaticPage(
+                text = ui.chapterText,
+                page = page,
+                textSizePx = textSizePx,
+                serif = serif,
+                lineSpacing = lineSpacing,
+                widthPx = widthPx,
+                textColor = textColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(pageHeightDp)
+            )
+        }
+        if (hasNext) {
+            ScrollChapterButton("下一章", accentColor) { vm.nextChapter() }
+        } else {
+            Text(
+                "—— 全书完 ——",
+                color = accentColor,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScrollChapterButton(label: String, color: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 48.dp, vertical = 20.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(color.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = color, fontSize = 13.sp)
+    }
+}
+
+/** 与分页完全相同的 StaticLayout 参数渲染一页文本（无翻页动画，两种模式共用） */
+@Composable
+fun StaticPage(
     text: String,
     page: PaginationEngine.Page,
     textSizePx: Float,
@@ -357,9 +491,7 @@ private fun PageCanvas(
     lineSpacing: Float,
     widthPx: Int,
     textColor: Color,
-    pageAnim: PageAnim,
-    pagerState: androidx.compose.foundation.pager.PagerState,
-    pageIdx: Int
+    modifier: Modifier = Modifier
 ) {
     val paint = remember(textSizePx, serif, textColor) {
         TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -383,7 +515,25 @@ private fun PageCanvas(
             .setIncludePad(false)
             .build()
     }
+    androidx.compose.foundation.Canvas(modifier) {
+        layout.draw(drawContext.canvas.nativeCanvas)
+    }
+}
 
+/** 翻页模式页面 + 翻页动画 */
+@Composable
+private fun PageCanvas(
+    text: String,
+    page: PaginationEngine.Page,
+    textSizePx: Float,
+    serif: Boolean,
+    lineSpacing: Float,
+    widthPx: Int,
+    textColor: Color,
+    pageAnim: PageAnim,
+    pagerState: PagerState,
+    pageIdx: Int
+) {
     val animModifier = when (pageAnim) {
         PageAnim.SLIDE -> Modifier
         PageAnim.COVER -> Modifier.graphicsLayer {
@@ -401,16 +551,18 @@ private fun PageCanvas(
             translationX = pagerState.currentPageOffsetFraction * size.width
         }
     }
-
-    Box(
-        Modifier
+    StaticPage(
+        text = text,
+        page = page,
+        textSizePx = textSizePx,
+        serif = serif,
+        lineSpacing = lineSpacing,
+        widthPx = widthPx,
+        textColor = textColor,
+        modifier = Modifier
             .fillMaxSize()
             .then(animModifier)
-    ) {
-        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-            layout.draw(drawContext.canvas.nativeCanvas)
-        }
-    }
+    )
 }
 
 @Composable
@@ -473,14 +625,14 @@ private fun ReaderFooter(
                 Modifier
                     .width(18.dp)
                     .height(10.dp)
-                    .background(palette.secondary.copy(alpha = 0.2f), CircleShape)
+                    .background(palette.secondary.copy(alpha = 0.2f), RoundedCornerShape(5.dp))
                     .padding(1.dp)
             ) {
                 Box(
                     Modifier
                         .fillMaxWidth(battery / 100f)
                         .height(8.dp)
-                        .background(palette.secondary, CircleShape)
+                        .background(palette.secondary, RoundedCornerShape(4.dp))
                 )
             }
             Spacer(Modifier.width(2.dp))

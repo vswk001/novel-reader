@@ -1,6 +1,8 @@
 package com.moyue.reader.reader
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -19,13 +21,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
@@ -38,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,15 +48,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
 import com.moyue.reader.data.repo.ReaderThemeKind
 
 private enum class ReaderSheet { TOC, BOOKMARK, SEARCH }
 
+/**
+ * 阅读菜单：顶部返回栏 + 底部悬浮圆角面板（适配导航栏/刘海安全区）。
+ * 系统栏保持隐藏（沉浸式），菜单不再唤出导航栏。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderMenuOverlay(
@@ -66,17 +78,17 @@ fun ReaderMenuOverlay(
 ) {
     var sheet by remember { mutableStateOf<ReaderSheet?>(null) }
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInVertically { it },
-        exit = slideOutVertically { it }
-    ) {
-        Column(Modifier.fillMaxWidth()) {
-            // ---- 顶栏 ----
+    AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+        // 顶栏
+        Surface(
+            color = palette.menuBg.copy(alpha = 0.96f),
+            shape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Row(
                 Modifier
-                    .fillMaxWidth()
-                    .background(palette.menuBg)
+                    .windowInsetsPadding(WindowInsets.displayCutout)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -109,143 +121,148 @@ fun ReaderMenuOverlay(
                     )
                 }
             }
+        }
+    }
 
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically { it / 2 } + fadeIn(),
+        exit = slideOutVertically { it / 2 } + fadeOut()
+    ) {
+        Column(Modifier.fillMaxWidth()) {
             Spacer(Modifier.weight(1f, true))
-
-            // ---- 底部面板 ----
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(palette.menuBg)
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            Surface(
+                color = palette.menuBg.copy(alpha = 0.98f),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                shadowElevation = 12.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // 亮度
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = {
-                        vm.updatePrefs {
-                            it.copy(brightnessFollowSystem = !it.brightnessFollowSystem)
-                        }
-                    }) {
-                        Icon(
-                            Icons.Filled.Brightness6,
-                            contentDescription = "亮度",
-                            tint = if (ui.prefs.brightnessFollowSystem) palette.secondary else palette.menuText
-                        )
-                    }
-                    Text(
-                        if (ui.prefs.brightnessFollowSystem) "跟随系统" else "手动",
-                        color = palette.secondary,
-                        fontSize = 12.sp
-                    )
-                    Slider(
+                Column(
+                    Modifier
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(horizontal = 18.dp, vertical = 12.dp)
+                ) {
+                    // ---- 亮度 ----
+                    MenuSliderRow(
+                        palette = palette,
                         value = ui.prefs.brightness,
+                        enabled = !ui.prefs.brightnessFollowSystem,
+                        label = if (ui.prefs.brightnessFollowSystem) "跟随系统" else "手动",
+                        onLabelClick = {
+                            vm.updatePrefs {
+                                it.copy(brightnessFollowSystem = !it.brightnessFollowSystem)
+                            }
+                        },
                         onValueChange = {
                             vm.updatePrefs { p ->
                                 p.copy(brightness = it, brightnessFollowSystem = false)
                             }
-                        },
-                        valueRange = 0.05f..1f,
+                        }
+                    )
+
+                    MenuDivider(palette)
+
+                    // ---- 字号 + 主题 + 字体 ----
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 8.dp),
-                        enabled = !ui.prefs.brightnessFollowSystem
-                    )
-                }
-
-                // 字号 + 主题 + 字体
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    MenuRoundButton("A－", palette) {
-                        vm.updatePrefs { it.copy(fontSp = (it.fontSp - 1).coerceIn(10, 40)) }
-                    }
-                    Text(
-                        "${ui.prefs.fontSp}",
-                        color = palette.menuText,
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(horizontal = 10.dp)
-                    )
-                    MenuRoundButton("A＋", palette) {
-                        vm.updatePrefs { it.copy(fontSp = (it.fontSp + 1).coerceIn(10, 40)) }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    ReaderThemes.selectable().forEach { kind ->
-                        val c = ReaderThemes.of(kind)
-                        val selected = ui.prefs.theme == kind && !ui.prefs.themeFollowSystem
-                        Box(
-                            Modifier
-                                .padding(horizontal = 3.dp)
-                                .size(26.dp)
-                                .background(c.bg, CircleShape)
-                                .border(
-                                    width = if (selected) 2.dp else 1.dp,
-                                    color = if (selected) palette.menuText else palette.divider,
-                                    shape = CircleShape
-                                )
-                                .clickable {
-                                    vm.updatePrefs {
-                                        it.copy(theme = kind, themeFollowSystem = false)
-                                    }
-                                }
-                        )
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    MenuRoundButton(
-                        if (ui.prefs.serif) "宋" else "黑",
-                        palette,
-                        highlight = true
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
                     ) {
-                        vm.updatePrefs { it.copy(serif = !it.serif) }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // 章节进度
-                val chapterCount = ui.chapters.size
-                if (chapterCount > 1) {
-                    var sliderValue by remember(ui.chapterIdx) {
-                        mutableStateOf(ui.chapterIdx.toFloat())
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        MenuRoundButton("A－", palette) {
+                            vm.updatePrefs { it.copy(fontSp = (it.fontSp - 1).coerceIn(10, 40)) }
+                        }
                         Text(
-                            "${ui.chapterIdx + 1}/$chapterCount",
-                            color = palette.secondary,
-                            fontSize = 12.sp
+                            "${ui.prefs.fontSp}",
+                            color = palette.menuText,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp)
                         )
-                        Slider(
-                            value = sliderValue,
-                            onValueChange = { sliderValue = it },
-                            onValueChangeFinished = {
-                                vm.jumpToChapter(sliderValue.toInt().coerceIn(0, chapterCount - 1))
-                            },
-                            valueRange = 0f..(chapterCount - 1).toFloat(),
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 10.dp)
-                        )
+                        MenuRoundButton("A＋", palette) {
+                            vm.updatePrefs { it.copy(fontSp = (it.fontSp + 1).coerceIn(10, 40)) }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        ReaderThemes.selectable().forEach { kind ->
+                            val c = ReaderThemes.of(kind)
+                            val selected = ui.prefs.theme == kind && !ui.prefs.themeFollowSystem
+                            Box(
+                                Modifier
+                                    .padding(horizontal = 3.dp)
+                                    .size(28.dp)
+                                    .background(c.bg, CircleShape)
+                                    .border(
+                                        width = if (selected) 2.dp else 1.dp,
+                                        color = if (selected) palette.menuText else palette.divider,
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        vm.updatePrefs {
+                                            it.copy(theme = kind, themeFollowSystem = false)
+                                        }
+                                    }
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        MenuRoundButton(
+                            if (ui.prefs.serif) "宋" else "黑",
+                            palette,
+                            highlight = true
+                        ) {
+                            vm.updatePrefs { it.copy(serif = !it.serif) }
+                        }
                     }
-                }
 
-                Spacer(Modifier.height(4.dp))
+                    // ---- 章节进度 ----
+                    val chapterCount = ui.chapters.size
+                    if (chapterCount > 1) {
+                        MenuDivider(palette)
+                        var sliderValue by remember(ui.chapterIdx) {
+                            mutableStateOf(ui.chapterIdx.toFloat())
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${ui.chapterIdx + 1}/$chapterCount",
+                                color = palette.secondary,
+                                fontSize = 12.sp
+                            )
+                            Slider(
+                                value = sliderValue,
+                                onValueChange = { sliderValue = it },
+                                onValueChangeFinished = {
+                                    vm.jumpToChapter(
+                                        sliderValue.toInt().coerceIn(0, chapterCount - 1)
+                                    )
+                                },
+                                valueRange = 0f..(chapterCount - 1).toFloat(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 10.dp)
+                            )
+                        }
+                    }
 
-                // 功能按钮
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    MenuIconButton("目录", Icons.AutoMirrored.Filled.MenuBook, palette) {
-                        sheet = ReaderSheet.TOC
-                    }
-                    MenuIconButton("书签", Icons.Filled.Star, palette) {
-                        sheet = ReaderSheet.BOOKMARK
-                    }
-                    MenuIconButton("上一章", Icons.Filled.KeyboardArrowUp, palette) {
-                        vm.prevChapter()
-                    }
-                    MenuIconButton("下一章", Icons.Filled.KeyboardArrowDown, palette) {
-                        vm.nextChapter()
+                    MenuDivider(palette)
+
+                    // ---- 功能按钮 ----
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        MenuIconButton("目录", Icons.AutoMirrored.Filled.MenuBook, palette) {
+                            sheet = ReaderSheet.TOC
+                        }
+                        MenuIconButton("书签", Icons.Filled.Star, palette) {
+                            sheet = ReaderSheet.BOOKMARK
+                        }
+                        MenuIconButton("上一章", Icons.Filled.KeyboardArrowUp, palette) {
+                            vm.prevChapter()
+                        }
+                        MenuIconButton("下一章", Icons.Filled.KeyboardArrowDown, palette) {
+                            vm.nextChapter()
+                        }
                     }
                 }
             }
@@ -257,7 +274,7 @@ fun ReaderMenuOverlay(
     if (current != null) {
         ModalBottomSheet(
             onDismissRequest = { sheet = null },
-            containerColor = palette.menuBg
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             when (current) {
                 ReaderSheet.TOC -> TocSheetContent(ui = ui, palette = palette) { idx ->
@@ -275,6 +292,47 @@ fun ReaderMenuOverlay(
 }
 
 @Composable
+private fun MenuDivider(palette: ReaderPalette) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .height(0.6.dp)
+            .background(palette.divider.copy(alpha = 0.6f))
+    )
+}
+
+@Composable
+private fun MenuSliderRow(
+    palette: ReaderPalette,
+    value: Float,
+    enabled: Boolean,
+    label: String,
+    onLabelClick: () -> Unit,
+    onValueChange: (Float) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("☀", fontSize = 16.sp, color = palette.menuText)
+        Text(
+            label,
+            fontSize = 12.sp,
+            color = palette.secondary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onLabelClick)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = 0.05f..1f,
+            enabled = enabled,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
 private fun MenuRoundButton(
     label: String,
     palette: ReaderPalette,
@@ -283,8 +341,12 @@ private fun MenuRoundButton(
 ) {
     Box(
         Modifier
-            .size(34.dp)
-            .border(1.dp, if (highlight) palette.menuText else palette.divider, CircleShape)
+            .size(36.dp)
+            .background(
+                if (highlight) palette.menuText.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent,
+                CircleShape
+            )
+            .border(1.dp, palette.divider, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -300,17 +362,26 @@ private fun MenuRoundButton(
 @Composable
 private fun MenuIconButton(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     palette: ReaderPalette,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Icon(icon, contentDescription = label, tint = palette.menuText)
+        Box(
+            Modifier
+                .size(44.dp)
+                .background(palette.menuText.copy(alpha = 0.08f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = label, tint = palette.menuText)
+        }
+        Spacer(Modifier.height(4.dp))
         Text(label, color = palette.secondary, fontSize = 11.sp)
     }
 }
@@ -329,22 +400,22 @@ private fun TocSheetContent(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 20.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "目录（${ui.chapters.size} 章）",
-                color = palette.menuText,
-                fontSize = 15.sp,
+                "目录 · ${ui.chapters.size} 章",
+                style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
             Text(
-                if (reversed) "倒序" else "正序",
-                color = palette.secondary,
+                if (reversed) "倒序 ⇅" else "正序 ⇅",
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 13.sp,
                 modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
                     .clickable { reversed = !reversed }
-                    .padding(6.dp)
+                    .padding(8.dp)
             )
         }
         LazyColumn(Modifier.height(480.dp)) {
@@ -352,14 +423,21 @@ private fun TocSheetContent(
                 val isCurrent = ch.idx == ui.chapterIdx
                 Text(
                     text = ch.title,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary else palette.menuText,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onPick(ch.idx) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .background(
+                            if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else androidx.compose.ui.graphics.Color.Transparent,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
         }
@@ -376,34 +454,40 @@ private fun BookmarkSheetContent(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 20.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "书签（${ui.bookmarks.size}）",
-                color = palette.menuText,
-                fontSize = 15.sp,
+                "书签 · ${ui.bookmarks.size}",
+                style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { vm.addBookmarkAtCurrentPage() }
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { vm.addBookmarkAtCurrentPage() }
+                    .padding(8.dp)
             ) {
                 Icon(
                     Icons.Filled.Add,
                     contentDescription = "新增",
-                    tint = palette.menuText,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
-                Text("添加当前页", color = palette.secondary, fontSize = 13.sp)
+                Text(
+                    "添加当前页",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp
+                )
             }
         }
         if (ui.bookmarks.isEmpty()) {
             Text(
                 "暂无书签，点击右上角添加",
-                color = palette.secondary,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(16.dp)
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp)
             )
         }
         LazyColumn(Modifier.height(460.dp)) {
@@ -412,18 +496,20 @@ private fun BookmarkSheetContent(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
                         Modifier
                             .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable {
                                 vm.jumpToChapter(bm.chapterIdx, bm.charOffset.let {
                                     val ch = ui.chapters.getOrNull(bm.chapterIdx)
                                     if (ch != null) (it - ch.charStart).coerceAtLeast(0) else 0
                                 })
                             }
+                            .padding(8.dp)
                     ) {
                         Text(
                             chapterTitle,
@@ -432,7 +518,6 @@ private fun BookmarkSheetContent(
                         )
                         Text(
                             bm.excerpt,
-                            color = palette.menuText,
                             fontSize = 13.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -442,7 +527,7 @@ private fun BookmarkSheetContent(
                         Icon(
                             Icons.Filled.Delete,
                             contentDescription = "删除",
-                            tint = palette.secondary,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -464,16 +549,17 @@ private fun SearchSheetContent(
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("书内搜索", color = palette.secondary) },
+            placeholder = { Text("书内搜索") },
             singleLine = true,
+            shape = RoundedCornerShape(14.dp),
             trailingIcon = {
                 IconButton(onClick = { if (query.isNotBlank()) vm.search(query) }) {
-                    Icon(Icons.Filled.Search, contentDescription = "搜索", tint = palette.menuText)
+                    Icon(Icons.Filled.Search, contentDescription = "搜索")
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 20.dp)
         )
         Text(
             when {
@@ -482,9 +568,9 @@ private fun SearchSheetContent(
                 ui.searchResults.isEmpty() -> "没有找到「$query」"
                 else -> "共 ${ui.searchResults.size} 处结果"
             },
-            color = palette.secondary,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
         LazyColumn(Modifier.height(420.dp)) {
             items(ui.searchResults.orEmpty(), key = { "${it.chapterIdx}-${it.charOffset}" }) { hit ->
@@ -492,7 +578,7 @@ private fun SearchSheetContent(
                     Modifier
                         .fillMaxWidth()
                         .clickable { onPick(hit) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
                 ) {
                     Text(
                         hit.chapterTitle,
@@ -501,7 +587,6 @@ private fun SearchSheetContent(
                     )
                     Text(
                         hit.snippet,
-                        color = palette.menuText,
                         fontSize = 13.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis

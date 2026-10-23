@@ -3,6 +3,7 @@ package com.moyue.reader.bookshelf
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animate
+import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.FolderOpen
@@ -52,6 +54,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -84,6 +87,7 @@ import com.moyue.reader.di.Graph
 import com.moyue.reader.privacy.PasswordDialog
 import com.moyue.reader.privacy.PasswordDialogKind
 import com.moyue.reader.ui.common.BookCover
+import com.moyue.reader.ui.common.BookProgressBar
 import com.moyue.reader.ui.common.fmtDuration
 import com.moyue.reader.ui.common.fmtSize
 import kotlinx.coroutines.Job
@@ -306,21 +310,27 @@ fun BookshelfScreen(
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 ui.message?.let { msg ->
-                    Row(
-                        Modifier
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
-                        Text(
-                            msg,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = { vm.clearMessage() }) { Text("关闭") }
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                msg,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { vm.clearMessage() }) { Text("关闭") }
+                        }
                     }
                 }
                 if (showSearch) {
@@ -346,19 +356,37 @@ fun BookshelfScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                Modifier
+                                    .size(96.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                        androidx.compose.foundation.shape.CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.MenuBook,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(44.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(Modifier.height(16.dp))
                             Text(
-                                if (space == 1) "隐私空间是空的" else "书架空空如也",
-                                style = MaterialTheme.typography.titleMedium
+                                if (space == 1) "隐私空间是空的" else "书架还空着",
+                                style = MaterialTheme.typography.titleLarge
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 if (space == 1) {
-                                    "点击右下角导入，书籍只存在于隐私空间\n通过长按可在两个空间之间转移"
+                                    "导入的书籍只存在于隐私空间\n长按书籍可在两个空间之间转移"
                                 } else {
-                                    "点击右下角「导入图书」，选择手机中的 txt 文件\n支持自动识别编码与章节目录"
+                                    "导入手机中的 txt 文件开始阅读\n自动识别编码与章节目录"
                                 },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
@@ -372,10 +400,12 @@ fun BookshelfScreen(
                     ) {
                         items(books, key = { it.id }) { book ->
                             Column(
-                                Modifier.combinedClickable(
-                                    onClick = { onOpenBook(book.id) },
-                                    onLongClick = { actionBook = book }
-                                )
+                                Modifier
+                                    .animateItem()
+                                    .combinedClickable(
+                                        onClick = { onOpenBook(book.id) },
+                                        onLongClick = { actionBook = book }
+                                    )
                             ) {
                                 BookCover(
                                     title = book.title,
@@ -384,13 +414,21 @@ fun BookshelfScreen(
                                         .fillMaxWidth()
                                         .aspectRatio(0.72f)
                                 )
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(Modifier.height(6.dp))
                                 Text(
                                     if (book.pinned) "📌 ${book.title}" else book.title,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
+                                Spacer(Modifier.height(4.dp))
+                                BookProgressBar(
+                                    progressPercent(book),
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp)
+                                )
+                                Spacer(Modifier.height(2.dp))
                                 Text(
                                     progressText(book),
                                     style = MaterialTheme.typography.labelSmall,
@@ -429,6 +467,14 @@ fun BookshelfScreen(
                                         overflow = TextOverflow.Ellipsis,
                                         style = MaterialTheme.typography.bodyLarge
                                     )
+                                    Spacer(Modifier.height(4.dp))
+                                    BookProgressBar(
+                                        progressPercent(book),
+                                        Modifier
+                                            .fillMaxWidth(0.72f)
+                                            .height(3.dp)
+                                    )
+                                    Spacer(Modifier.height(4.dp))
                                     Text(
                                         "${progressText(book)} · ${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)}",
                                         style = MaterialTheme.typography.labelSmall,
@@ -568,11 +614,15 @@ fun BookshelfScreen(
     }
 }
 
-private fun progressText(book: BookEntity): String =
+private fun progressPercent(book: BookEntity): Int =
     if (book.totalChars > 0) {
-        val percent = ((book.curChapter + 1) * 100L / book.chapterCount.coerceAtLeast(1))
-            .coerceIn(0L, 100L)
-        "已读 $percent%"
+        (((book.curChapter + 1) * 100L / book.chapterCount.coerceAtLeast(1))
+            .coerceIn(0L, 100L)).toInt()
     } else {
-        "未开始"
+        0
     }
+
+private fun progressText(book: BookEntity): String {
+    val p = progressPercent(book)
+    return if (p > 0) "已读 $p%" else "未开始"
+}

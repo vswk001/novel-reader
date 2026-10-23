@@ -25,6 +25,14 @@ enum class PageAnim { SLIDE, COVER, FADE, NONE }
 @Serializable
 enum class SortKind { RECENT, TITLE, ADDED }
 
+/** 阅读模式：翻页 / 上下滚动 */
+@Serializable
+enum class ReadMode { PAGE, SCROLL }
+
+/** 点击翻页区域：左右 / 上下 / 关闭 */
+@Serializable
+enum class ClickZone { LEFT_RIGHT, TOP_BOTTOM, OFF }
+
 /** 全局阅读与应用偏好，UI 与阅读器共用 */
 @Serializable
 data class ReaderPrefs(
@@ -40,7 +48,8 @@ data class ReaderPrefs(
     val serif: Boolean = false,
     val pageAnim: PageAnim = PageAnim.SLIDE,
     val volumeKeyTurn: Boolean = true,
-    val tapTurn: Boolean = true,
+    val tapZone: ClickZone = ClickZone.LEFT_RIGHT,
+    val readMode: ReadMode = ReadMode.PAGE,
     val keepScreenOn: Boolean = true,
     val brightnessFollowSystem: Boolean = true,
     /** 0.02..1.0，仅作用于本应用窗口 */
@@ -62,7 +71,8 @@ class SettingsRepository(private val context: Context) {
         val serif = booleanPreferencesKey("serif")
         val pageAnim = stringPreferencesKey("page_anim")
         val volumeKeyTurn = booleanPreferencesKey("volume_key_turn")
-        val tapTurn = booleanPreferencesKey("tap_turn")
+        val tapZone = stringPreferencesKey("tap_zone")
+        val readMode = stringPreferencesKey("read_mode")
         val keepScreenOn = booleanPreferencesKey("keep_screen_on")
         val brightnessFollowSystem = booleanPreferencesKey("brightness_follow_system")
         val brightness = floatPreferencesKey("brightness")
@@ -82,7 +92,8 @@ class SettingsRepository(private val context: Context) {
             serif = p[Keys.serif] ?: false,
             pageAnim = enumOrDefault(p[Keys.pageAnim], PageAnim.SLIDE),
             volumeKeyTurn = p[Keys.volumeKeyTurn] ?: true,
-            tapTurn = p[Keys.tapTurn] ?: true,
+            tapZone = enumOrDefault(p[Keys.tapZone], ClickZone.LEFT_RIGHT),
+            readMode = enumOrDefault(p[Keys.readMode], ReadMode.PAGE),
             keepScreenOn = p[Keys.keepScreenOn] ?: true,
             brightnessFollowSystem = p[Keys.brightnessFollowSystem] ?: true,
             brightness = p[Keys.brightness] ?: 0.5f,
@@ -107,7 +118,8 @@ class SettingsRepository(private val context: Context) {
             p[Keys.serif] = new.serif
             p[Keys.pageAnim] = new.pageAnim.name
             p[Keys.volumeKeyTurn] = new.volumeKeyTurn
-            p[Keys.tapTurn] = new.tapTurn
+            p[Keys.tapZone] = new.tapZone.name
+            p[Keys.readMode] = new.readMode.name
             p[Keys.keepScreenOn] = new.keepScreenOn
             p[Keys.brightnessFollowSystem] = new.brightnessFollowSystem
             p[Keys.brightness] = new.brightness
@@ -127,7 +139,8 @@ class SettingsRepository(private val context: Context) {
         serif = p[Keys.serif] ?: false,
         pageAnim = enumOrDefault(p[Keys.pageAnim], PageAnim.SLIDE),
         volumeKeyTurn = p[Keys.volumeKeyTurn] ?: true,
-        tapTurn = p[Keys.tapTurn] ?: true,
+        tapZone = enumOrDefault(p[Keys.tapZone], ClickZone.LEFT_RIGHT),
+        readMode = enumOrDefault(p[Keys.readMode], ReadMode.PAGE),
         keepScreenOn = p[Keys.keepScreenOn] ?: true,
         brightnessFollowSystem = p[Keys.brightnessFollowSystem] ?: true,
         brightness = p[Keys.brightness] ?: 0.5f,
