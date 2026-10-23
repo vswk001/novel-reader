@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileMove
@@ -50,6 +51,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -173,34 +175,8 @@ fun BookshelfScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (space == 1) "隐私空间" else "墨阅 · 书架",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    if (space == 1 && onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出隐私空间")
-                        }
-                    }
-                },
-                colors = if (space == 1) {
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                } else {
-                    TopAppBarDefaults.topAppBarColors()
-                },
-                actions = {
+    // 顶栏动作（普通/隐私空间共用）
+    val barActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                     if (space == 1) {
                         IconButton(onClick = { showPrivateMenu = true }) {
                             Icon(Icons.Filled.Key, contentDescription = "隐私空间设置")
@@ -257,8 +233,51 @@ fun BookshelfScreen(
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "设置")
                     }
-                }
-            )
+    }
+
+    val scrollBehavior = if (space == 0) {
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    } else {
+        TopAppBarDefaults.pinnedScrollBehavior()
+    }
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            if (space == 0) {
+                // 普通书架：大标题栏，滚动收起
+                LargeTopAppBar(
+                    title = { Text("墨阅 · 书架") },
+                    actions = barActions,
+                    scrollBehavior = scrollBehavior
+                )
+            } else {
+                // 隐私空间：常规标题栏（返回 + 钥匙菜单）
+                TopAppBar(
+                    title = {
+                        Text(
+                            "隐私空间",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    navigationIcon = {
+                        if (space == 1 && onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出隐私空间")
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    actions = barActions,
+                    scrollBehavior = scrollBehavior
+                )
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -312,6 +331,59 @@ fun BookshelfScreen(
                     .fillMaxSize()
                     .graphicsLayer { translationY = pullPx * 0.3f }
             ) {
+                // 继续阅读入口（普通书架 + 有书时）
+                if (space == 0 && ui.books.isNotEmpty()) {
+                    val lastBook = remember(ui.books) {
+                        ui.books.maxByOrNull { it.lastReadAt }
+                    }
+                    lastBook?.let { book ->
+                        Surface(
+                            onClick = { onOpenBook(book.id) },
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                BookCover(
+                                    title = book.title,
+                                    hue = book.coverHue,
+                                    fontSize = 13.sp,
+                                    maxChars = 2,
+                                    modifier = Modifier.size(width = 30.dp, height = 42.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "继续阅读",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        book.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        "第 ${book.curChapter + 1}/${book.chapterCount} 章 · ${progressText(book)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
                 if (ui.importing) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
@@ -463,6 +535,7 @@ fun BookshelfScreen(
                                     title = book.title,
                                     hue = book.coverHue,
                                     fontSize = 20.sp,
+                                    maxChars = 3,
                                     modifier = Modifier.size(width = 52.dp, height = 72.dp)
                                 )
                                 Spacer(Modifier.width(12.dp))

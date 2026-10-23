@@ -263,10 +263,38 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 
     // ---------- 主体 ----------
+    // 点击检测挂在根节点：拖动被上层滚动/翻页消费即视为非点击，
+    // 纯点击才触发菜单/翻页——滚动模式的手指滑动因此不被拦截
     Box(
         Modifier
             .fillMaxSize()
             .background(palette.bg)
+            .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible) {
+                detectTapGestures { offset ->
+                    if (ui.menuVisible) {
+                        vm.setMenuVisible(false)
+                        return@detectTapGestures
+                    }
+                    if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {
+                        vm.toggleMenu()
+                        return@detectTapGestures
+                    }
+                    val w = size.width
+                    val h = size.height
+                    when (prefs.tapZone) {
+                        ClickZone.TOP_BOTTOM -> when {
+                            offset.y < h * 0.3f -> pageAction(-1)
+                            offset.y > h * 0.7f -> pageAction(1)
+                            else -> vm.toggleMenu()
+                        }
+                        else -> when {
+                            offset.x < w * 0.28f -> pageAction(-1)
+                            offset.x > w * 0.72f -> pageAction(1)
+                            else -> vm.toggleMenu()
+                        }
+                    }
+                }
+            }
     ) {
         Column(
             Modifier
@@ -344,38 +372,6 @@ fun ReaderScreen(onBack: () -> Unit) {
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = padH + 4.dp, vertical = 4.dp)
-        )
-
-        // 点击层
-        Box(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible) {
-                    detectTapGestures { offset ->
-                        if (ui.menuVisible) {
-                            vm.setMenuVisible(false)
-                            return@detectTapGestures
-                        }
-                        if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {
-                            vm.toggleMenu()
-                            return@detectTapGestures
-                        }
-                        val w = size.width
-                        val h = size.height
-                        when (prefs.tapZone) {
-                            ClickZone.TOP_BOTTOM -> when {
-                                offset.y < h * 0.3f -> pageAction(-1)
-                                offset.y > h * 0.7f -> pageAction(1)
-                                else -> vm.toggleMenu()
-                            }
-                            else -> when {
-                                offset.x < w * 0.28f -> pageAction(-1)
-                                offset.x > w * 0.72f -> pageAction(1)
-                                else -> vm.toggleMenu()
-                            }
-                        }
-                    }
-                }
         )
 
         // 菜单

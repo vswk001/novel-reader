@@ -132,7 +132,8 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
                             BookCover(
                                 title = book.title,
                                 hue = book.coverHue,
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
+                                maxChars = 2,
                                 modifier = Modifier
                                     .width(30.dp)
                                     .height(42.dp)
