@@ -17,7 +17,7 @@ class BookImporter(
     data class ImportResult(val fileName: String, val ok: Boolean, val message: String)
 
     companion object {
-        val SUPPORTED_EXTS = setOf("txt", "log", "md")
+        val SUPPORTED_EXTS = setOf("txt", "log", "md", "epub")
         private const val MAX_FILE_BYTES = 256L * 1024 * 1024
     }
 
@@ -39,14 +39,36 @@ class BookImporter(
                 ?: return@withContext ImportResult(name, false, "无法读取文件")
             if (bytes.isEmpty()) return@withContext ImportResult(name, false, "文件为空")
 
-            val charsetName = CharsetDetector.detect(bytes)
-            val bom = CharsetDetector.bomLength(bytes)
-            val raw = String(bytes, bom, bytes.size - bom, Charset.forName(charsetName))
-            val text = TextNormalizer.normalize(raw)
-            val chapters = ChapterParser.parse(text)
+            var bookTitle = title
+            val charsetName: String
+            val text: String
+            val chapters: List<ChapterParser.Chapter>
+
+            if (name.substringAfterLast('.', "").equals("epub", ignoreCase = true)) {
+                // EPUB：结构化解析（OPF/spine/NCX），转成与 TXT 相同的规范化文本 + 章节偏移
+                val epub = EpubParser.parse(bytes)
+                if (epub.title.isNotBlank()) bookTitle = epub.title
+                val sb = StringBuilder()
+                val list = mutableListOf<ChapterParser.Chapter>()
+                for (c in epub.chapters) {
+                    val start = sb.length
+                    sb.append(c.title).append('\n')
+                    sb.append(TextNormalizer.normalize(c.text))
+                    list += ChapterParser.Chapter(c.title, start, sb.length)
+                }
+                charsetName = "EPUB"
+                text = sb.toString()
+                chapters = list
+            } else {
+                charsetName = CharsetDetector.detect(bytes)
+                val bom = CharsetDetector.bomLength(bytes)
+                val raw = String(bytes, bom, bytes.size - bom, Charset.forName(charsetName))
+                text = TextNormalizer.normalize(raw)
+                chapters = ChapterParser.parse(text)
+            }
 
             val bookId = repo.createBook(
-                title = title,
+                title = bookTitle,
                 fileName = name,
                 sizeBytes = size,
                 charset = charsetName,

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.moyue.reader.di.Graph
 import kotlinx.coroutines.launch
 
@@ -57,6 +58,7 @@ fun PasswordDialog(
     var stage by remember { mutableStateOf<Stage>(Stage.Loading) }
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var showForgot by remember { mutableStateOf(false) }
 
     // 读取已存密码类型，决定起始阶段
     LaunchedEffect(kind) {
@@ -133,7 +135,7 @@ fun PasswordDialog(
 
                     Stage.ChooseType -> {
                         Text(
-                            "选择密码方式，忘记密码将无法进入隐私空间（可清除应用数据重置）",
+                            "选择密码方式；忘记密码可通过「忘记密码？」清除隐私空间数据后重设",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -198,6 +200,18 @@ fun PasswordDialog(
                         }
                     }
                 }
+                if (stage is Stage.VerifyOld) {
+                    TextButton(
+                        onClick = { showForgot = true },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text(
+                            "忘记密码？",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {},
@@ -205,4 +219,30 @@ fun PasswordDialog(
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+
+    // 忘记密码 → 仅清除隐私空间数据（普通书架保留），随后可重新设置
+    if (showForgot) {
+        AlertDialog(
+            onDismissRequest = { showForgot = false },
+            title = { Text("忘记密码") },
+            text = {
+                Text("将清空隐私空间内的全部书籍、进度与书签（普通书架不受影响），并重置隐私空间密码。此操作不可恢复。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        runCatching {
+                            Graph.privacyRepository.clearPassword()
+                            Graph.bookRepository.deleteAllInSpace(space = 1, deleteFile = true)
+                        }
+                        showForgot = false
+                        onDismiss()
+                    }
+                }) { Text("清除隐私空间", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgot = false }) { Text("取消") }
+            }
+        )
+    }
 }

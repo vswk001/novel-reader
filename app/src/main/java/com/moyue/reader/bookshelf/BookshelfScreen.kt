@@ -594,12 +594,14 @@ fun BookshelfScreen(
         AlertDialog(
             onDismissRequest = { showImportMenu = false },
             title = { Text("导入图书") },
-            text = { Text("支持 txt / log / md 文本文件，自动识别编码（GBK/UTF-8/UTF-16）与章节目录。") },
+            text = { Text("支持 txt / log / md / epub，自动识别编码（GBK/UTF-8/UTF-16）、EPUB 目录与章节划分。") },
             confirmButton = {
                 Column {
                     TextButton(onClick = {
                         showImportMenu = false
-                        pickFiles.launch(arrayOf("text/*", "application/octet-stream"))
+                        pickFiles.launch(
+                            arrayOf("text/*", "application/epub+zip", "application/octet-stream")
+                        )
                     }) {
                         Icon(Icons.Filled.UploadFile, contentDescription = null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))

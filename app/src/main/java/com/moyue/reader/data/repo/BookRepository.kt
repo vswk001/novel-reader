@@ -166,6 +166,14 @@ class BookRepository(
         }
     }
 
+    /** 清空某个空间的全部书籍（忘记密码时只清隐私空间、保留普通书架） */
+    suspend fun deleteAllInSpace(space: Int, deleteFile: Boolean) {
+        val books = bookDao.getAllOnce(space)
+        for (b in books) {
+            deleteBookById(b.id, deleteFile)
+        }
+    }
+
     data class SearchHit(
         val chapterIdx: Int,
         val chapterTitle: String,

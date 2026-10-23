@@ -175,6 +175,22 @@ fun SettingsScreen(onBack: () -> Unit) {
                 PrefSwitch("音量键翻页", "音量+上一页，音量-下一页", prefs.volumeKeyTurn) {
                     v -> update { it.copy(volumeKeyTurn = v) }
                 }
+                PrefSlider(
+                    label = "朗读语速",
+                    valueLabel = String.format("%.1f 倍", prefs.ttsRate),
+                    value = prefs.ttsRate,
+                    valueRange = 0.5f..2.0f,
+                    steps = 14,
+                    onChange = { v -> update { it.copy(ttsRate = (v * 10).toInt() / 10f) } }
+                )
+                PrefSlider(
+                    label = "自动滚动速度",
+                    valueLabel = "${prefs.autoScrollSpeed} dp/s",
+                    value = prefs.autoScrollSpeed.toFloat(),
+                    valueRange = 40f..400f,
+                    steps = 35,
+                    onChange = { v -> update { it.copy(autoScrollSpeed = v.toInt()) } }
+                )
             }
 
             // ---------- 排版 ----------
@@ -301,7 +317,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             // ---------- 关于 ----------
             SectionCard("关于") {
                 Text(
-                    "墨阅 v1.5.1 · 纯本地小说阅读器\n无网络权限、无广告、无遥测",
+                    "墨阅 v1.6.0 · 纯本地小说阅读器\n无网络权限、无广告、无遥测",
                     fontSize = 13.sp,
                     lineHeight = 20.sp
                 )

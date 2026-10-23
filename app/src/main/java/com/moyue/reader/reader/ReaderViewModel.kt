@@ -1,7 +1,13 @@
 package com.moyue.reader.reader
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Typeface
+import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.TextPaint
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -20,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidViewModel(app) {
 
@@ -50,7 +57,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val searchResults: List<BookRepository.SearchHit>? = null,
         val searching: Boolean = false,
         /** 短暂浮层提示（加书签等操作反馈），2 秒自动消失 */
-        val transient: String? = null
+        val transient: String? = null,
+        /** TTS 朗读中 */
+        val ttsRunning: Boolean = false,
+        /** 自动滚动中（滚动模式） */
+        val autoScroll: Boolean = false
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -151,6 +162,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             val relOffset = (absOffset - chapterStart).coerceIn(0, text.length)
             val idx = PaginationEngine.indexOfOffset(pages, relOffset)
             _ui.update { it.copy(pages = pages, pageIdx = idx, loading = false) }
+            // 章节切换完成且 TTS 在等待 → 继续朗读
+            if (ttsPending && _ui.value.ttsRunning) {
+                ttsPending = false
+                speakCurrentPage()
+            }
         }
     }
 
@@ -265,6 +281,126 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         }
     }
 
+    // ---- TTS 听书 ----
+
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var ttsPending = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var audioFocusRequested = false
+
+    private val utteranceListener = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) = Unit
+        override fun onDone(utteranceId: String?) {
+            mainHandler.post { advanceTts() }
+        }
+        override fun onError(utteranceId: String?) {
+            mainHandler.post { stopTts("朗读出错，已停止") }
+        }
+    }
+
+    fun toggleTts() {
+        if (_ui.value.ttsRunning) {
+            stopTts()
+            return
+        }
+        if (tts == null) {
+            showTransient("正在初始化语音引擎…")
+            tts = TextToSpeech(getApplication<Application>()) { status ->
+                ttsReady = status == TextToSpeech.SUCCESS
+                if (ttsReady) {
+                    tts?.language = Locale.SIMPLIFIED_CHINESE
+                    tts?.setOnUtteranceProgressListener(utteranceListener)
+                    mainHandler.post { startTts() }
+                } else {
+                    mainHandler.post { showTransient("系统语音引擎不可用，请先安装 TTS 引擎") }
+                }
+            }
+        } else {
+            startTts()
+        }
+    }
+
+    private fun startTts() {
+        if (!ttsReady) {
+            showTransient("系统语音引擎不可用，请先安装 TTS 引擎")
+            return
+        }
+        tts?.setSpeechRate(_ui.value.prefs.ttsRate)
+        requestAudioFocus()
+        _ui.update { it.copy(ttsRunning = true) }
+        showTransient("开始朗读")
+        speakCurrentPage()
+    }
+
+    private fun speakCurrentPage() {
+        val st = _ui.value
+        if (!st.ttsRunning) return
+        val page = st.pages.getOrNull(st.pageIdx)
+        if (page == null) { // 章节未就绪，等待分页完成
+            ttsPending = true
+            return
+        }
+        val text = st.chapterText
+            .substring(page.start.coerceIn(0, st.chapterText.length), page.end.coerceIn(0, st.chapterText.length))
+            .trim()
+        if (text.isEmpty()) {
+            advanceTts()
+            return
+        }
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "moyue-page")
+    }
+
+    /** 读完一页 → 下一页 / 下一章 / 结束 */
+    private fun advanceTts() {
+        val st = _ui.value
+        if (!st.ttsRunning) return
+        if (st.pageIdx < st.pages.size - 1) {
+            _ui.update { it.copy(pageIdx = st.pageIdx + 1) } // UI 同步滚动 Pager
+            speakCurrentPage()
+        } else if (st.chapterIdx < st.chapters.size - 1) {
+            ttsPending = true
+            nextChapter()
+        } else {
+            stopTts("全书朗读完毕")
+        }
+    }
+
+    private fun stopTts(message: String? = null) {
+        tts?.stop()
+        abandonAudioFocus()
+        _ui.update { it.copy(ttsRunning = false) }
+        ttsPending = false
+        if (message != null) showTransient(message)
+    }
+
+    private fun requestAudioFocus() {
+        if (audioFocusRequested) return
+        val am = getApplication<Application>()
+            .getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.requestAudioFocus(
+            null, AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+        )
+        audioFocusRequested = true
+    }
+
+    private fun abandonAudioFocus() {
+        if (!audioFocusRequested) return
+        val am = getApplication<Application>()
+            .getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.abandonAudioFocus(null)
+        audioFocusRequested = false
+    }
+
+    // ---- 自动滚动（滚动模式） ----
+
+    fun setAutoScroll(on: Boolean) {
+        _ui.update { if (it.autoScroll == on) it else it.copy(autoScroll = on) }
+    }
+
+    fun toggleAutoScroll() = setAutoScroll(!_ui.value.autoScroll)
+
     fun deleteBookmark(b: BookmarkEntity) {
         viewModelScope.launch { repo.deleteBookmark(b) }
     }
@@ -300,6 +436,10 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             // onCleared 时 viewModelScope 已取消，用 GlobalScope 兜底写入最后一段时长
             kotlinx.coroutines.GlobalScope.launch { repo.addReadTime(bookId, delta) }
         }
+        runCatching { tts?.stop() }
+        runCatching { tts?.shutdown() }
+        tts = null
+        abandonAudioFocus()
         super.onCleared()
     }
 }

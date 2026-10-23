@@ -29,9 +29,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -246,11 +250,11 @@ fun ReaderMenuOverlay(
 
                     MenuDivider(palette)
 
-                    // ---- 功能按钮 ----
+                    // ---- 功能按钮（两行） ----
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp),
+                            .padding(top = 8.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         MenuIconButton("目录", Icons.AutoMirrored.Filled.MenuBook, palette) {
@@ -265,6 +269,13 @@ fun ReaderMenuOverlay(
                         MenuIconButton("下一章", Icons.Filled.KeyboardArrowDown, palette) {
                             vm.nextChapter()
                         }
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
                         MenuIconButton(
                             if (ui.prefs.readMode == ReadMode.PAGE) "切滚动" else "切翻页",
                             Icons.Filled.SwapVert,
@@ -276,6 +287,25 @@ fun ReaderMenuOverlay(
                                     else ReadMode.PAGE
                                 )
                             }
+                        }
+                        MenuIconButton(
+                            if (ui.ttsRunning) "停止朗读" else "朗读",
+                            if (ui.ttsRunning) Icons.Filled.StopCircle
+                            else Icons.Filled.RecordVoiceOver,
+                            palette
+                        ) {
+                            vm.toggleTts()
+                        }
+                        MenuIconButton(
+                            if (ui.autoScroll) "停止滚动" else "自动滚动",
+                            if (ui.autoScroll) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,
+                            palette
+                        ) {
+                            // 翻页模式下点自动滚动：切到滚动模式并开始
+                            if (ui.prefs.readMode != ReadMode.SCROLL) {
+                                vm.updatePrefs { it.copy(readMode = ReadMode.SCROLL) }
+                            }
+                            vm.toggleAutoScroll()
                         }
                     }
                 }

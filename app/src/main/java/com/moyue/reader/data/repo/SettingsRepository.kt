@@ -56,7 +56,11 @@ data class ReaderPrefs(
     val brightness: Float = 0.5f,
     val secureMode: Boolean = false,
     val sortBy: SortKind = SortKind.RECENT,
-    val bookshelfGrid: Boolean = true
+    val bookshelfGrid: Boolean = true,
+    /** TTS 朗读语速 0.5..2.0 */
+    val ttsRate: Float = 1.0f,
+    /** 自动滚动速度 dp/s */
+    val autoScrollSpeed: Int = 140
 )
 
 class SettingsRepository(private val context: Context) {
@@ -79,6 +83,8 @@ class SettingsRepository(private val context: Context) {
         val secureMode = booleanPreferencesKey("secure_mode")
         val sortBy = stringPreferencesKey("sort_by")
         val bookshelfGrid = booleanPreferencesKey("bookshelf_grid")
+        val ttsRate = floatPreferencesKey("tts_rate")
+        val autoScrollSpeed = intPreferencesKey("auto_scroll_speed")
     }
 
     val prefs: Flow<ReaderPrefs> = context.dataStore.data.map { p ->
@@ -99,7 +105,9 @@ class SettingsRepository(private val context: Context) {
             brightness = p[Keys.brightness] ?: 0.5f,
             secureMode = p[Keys.secureMode] ?: false,
             sortBy = enumOrDefault(p[Keys.sortBy], SortKind.RECENT),
-            bookshelfGrid = p[Keys.bookshelfGrid] ?: true
+            bookshelfGrid = p[Keys.bookshelfGrid] ?: true,
+            ttsRate = p[Keys.ttsRate] ?: 1.0f,
+            autoScrollSpeed = p[Keys.autoScrollSpeed] ?: 140
         )
     }
 
@@ -126,6 +134,8 @@ class SettingsRepository(private val context: Context) {
             p[Keys.secureMode] = new.secureMode
             p[Keys.sortBy] = new.sortBy.name
             p[Keys.bookshelfGrid] = new.bookshelfGrid
+            p[Keys.ttsRate] = new.ttsRate
+            p[Keys.autoScrollSpeed] = new.autoScrollSpeed
         }
     }
 
@@ -146,7 +156,9 @@ class SettingsRepository(private val context: Context) {
         brightness = p[Keys.brightness] ?: 0.5f,
         secureMode = p[Keys.secureMode] ?: false,
         sortBy = enumOrDefault(p[Keys.sortBy], SortKind.RECENT),
-        bookshelfGrid = p[Keys.bookshelfGrid] ?: true
+        bookshelfGrid = p[Keys.bookshelfGrid] ?: true,
+        ttsRate = p[Keys.ttsRate] ?: 1.0f,
+        autoScrollSpeed = p[Keys.autoScrollSpeed] ?: 140
     )
 
     private inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =

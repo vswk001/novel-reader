@@ -15,13 +15,18 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,12 +54,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -124,6 +131,12 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 
     val scrollState = rememberScrollState()
+
+    // ---------- 亮度手势：左半屏上下拖动调节（松手持久化，拖动中实时生效） ----------
+    var brightnessDragActive by remember { mutableStateOf(false) }
+    var brightnessHud by remember { mutableStateOf<Float?>(null) }
+    var brightnessStartY by remember { mutableStateOf(0f) }
+    var brightnessStartVal by remember { mutableStateOf(0.5f) }
 
     // ---------- 翻页（PAGE 模式用 Pager） ----------
     val pagerState = rememberPagerState(initialPage = 0) { ui.pages.size }
@@ -270,8 +283,61 @@ fun ReaderScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(palette.bg)
+            // 自动滚动时：任意触摸立即停止
+            .pointerInput(ui.autoScroll) {
+                if (ui.autoScroll) {
+                    awaitEachGesture {
+                        awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
+                        vm.setAutoScroll(false)
+                    }
+                }
+            }
+            // 亮度手势（菜单关闭时左半屏竖向拖动；翻页模式下生效）
+            .pointerInput(prefs.brightnessFollowSystem, ui.menuVisible) {
+                detectVerticalDragGestures(
+                    onDragStart = { pos ->
+                        if (!ui.menuVisible && pos.x < size.width * 0.5f) {
+                            brightnessDragActive = true
+                            brightnessStartY = pos.y
+                            brightnessStartVal =
+                                if (prefs.brightnessFollowSystem) 0.5f else prefs.brightness
+                            brightnessHud = brightnessStartVal
+                        }
+                    },
+                    onVerticalDrag = { change, _ ->
+                        if (brightnessDragActive) {
+                            val v = (brightnessStartVal +
+                                (brightnessStartY - change.position.y) / (size.height * 0.7f))
+                                .coerceIn(0.02f, 1f)
+                            brightnessHud = v
+                            activity?.window?.let { w ->
+                                w.attributes = w.attributes.also { it.screenBrightness = v }
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        if (brightnessDragActive) {
+                            brightnessDragActive = false
+                            brightnessHud?.let { v ->
+                                vm.updatePrefs {
+                                    it.copy(brightness = v, brightnessFollowSystem = false)
+                                }
+                            }
+                            brightnessHud = null
+                        }
+                    },
+                    onDragCancel = {
+                        brightnessDragActive = false
+                        brightnessHud = null
+                    }
+                )
+            }
             .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible) {
                 detectTapGestures { offset ->
+                    if (ui.autoScroll) {
+                        vm.setAutoScroll(false)
+                        return@detectTapGestures
+                    }
                     if (ui.menuVisible) {
                         vm.setMenuVisible(false)
                         return@detectTapGestures
@@ -325,6 +391,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                         vm = vm,
                         scrollState = scrollState,
                         pageHeightPx = textAreaSize.height,
+                        autoSpeedPx = with(density) { prefs.autoScrollSpeed.dp.toPx() },
                         textSizePx = textSizePx,
                         serif = prefs.serif,
                         lineSpacing = prefs.lineSpacing,
@@ -375,6 +442,41 @@ fun ReaderScreen(onBack: () -> Unit) {
                 .padding(horizontal = padH + 4.dp, vertical = 4.dp)
         )
 
+        // 亮度手势 HUD
+        brightnessHud?.let { v ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = palette.menuBg.copy(alpha = 0.95f),
+                shadowElevation = 4.dp,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 20.dp)
+            ) {
+                Column(
+                    Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("☀", fontSize = 13.sp, color = palette.menuText)
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        Modifier
+                            .width(4.dp)
+                            .height(110.dp)
+                            .background(palette.divider, RoundedCornerShape(2.dp))
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(v)
+                                .background(palette.menuText, RoundedCornerShape(2.dp))
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("${(v * 100).toInt()}%", fontSize = 10.sp, color = palette.menuText)
+                }
+            }
+        }
+
         // 操作反馈浮层（加书签等）
         ui.transient?.let { msg ->
             Surface(
@@ -403,13 +505,14 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 }
 
-/** 上下滚动阅读模式：页面纵向连续堆叠，章节首尾提供上/下一章入口 */
+/** 上下滚动阅读模式：页面纵向连续堆叠，章节首尾提供上/下一章入口；支持自动滚动 */
 @Composable
 private fun ScrollReaderContent(
     ui: ReaderViewModel.UiState,
     vm: ReaderViewModel,
     scrollState: androidx.compose.foundation.ScrollState,
     pageHeightPx: Int,
+    autoSpeedPx: Float,
     textSizePx: Float,
     serif: Boolean,
     lineSpacing: Float,
@@ -419,6 +522,24 @@ private fun ScrollReaderContent(
     hasPrev: Boolean,
     hasNext: Boolean
 ) {
+    // 自动滚动：按帧推进，触底自动进入下一章；任意触摸停止（见 ReaderScreen 根手势）
+    LaunchedEffect(ui.autoScroll, ui.pages, pageHeightPx) {
+        if (!ui.autoScroll || pageHeightPx <= 0) return@LaunchedEffect
+        var lastNs = 0L
+        while (true) {
+            val now = withFrameNanos { it }
+            if (lastNs != 0L) {
+                val dt = (now - lastNs) / 1_000_000_000f
+                scrollState.scrollBy(autoSpeedPx * dt)
+                if (scrollState.value >= scrollState.maxValue - 4) {
+                    if (hasNext) vm.nextChapter() else vm.setAutoScroll(false)
+                    break
+                }
+            }
+            lastNs = now
+        }
+    }
+
     // 进度跟踪：当前页 = 视口中间可见的页
     LaunchedEffect(scrollState, pageHeightPx) {
         snapshotFlow { scrollState.value }.collect { v ->
