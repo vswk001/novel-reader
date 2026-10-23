@@ -301,7 +301,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             // ---------- 关于 ----------
             SectionCard("关于") {
                 Text(
-                    "墨阅 v1.3.0 · 纯本地小说阅读器\n无网络权限、无广告、无遥测",
+                    "墨阅 v1.4.0 · 纯本地小说阅读器\n无网络权限、无广告、无遥测",
                     fontSize = 13.sp,
                     lineHeight = 20.sp
                 )
