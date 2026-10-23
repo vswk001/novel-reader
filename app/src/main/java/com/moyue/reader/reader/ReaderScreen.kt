@@ -550,6 +550,33 @@ private fun PageCanvas(
         PageAnim.NONE -> Modifier.graphicsLayer {
             translationX = pagerState.currentPageOffsetFraction * size.width
         }
+        PageAnim.CURL -> Modifier.graphicsLayer {
+            // 仿真翻页（书本式）：当前页绕书脊 3D 翻转，下一页/上一页垫底静止
+            val f = pagerState.currentPageOffsetFraction
+            val w = size.width
+            when {
+                pagerState.currentPage == pageIdx && f > 0f -> {
+                    cameraDistance = 10f * density
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                    rotationY = -180f * f
+                    alpha = if (f > 0.5f) (1f - (f - 0.5f) * 2f).coerceIn(0f, 1f) else 1f
+                }
+                pagerState.currentPage + 1 == pageIdx && f > 0f -> {
+                    translationX = -(1f - f) * w
+                }
+                pagerState.currentPage == pageIdx && f < 0f -> {
+                    // 后退时当前页保持静止，等待上一页翻回
+                }
+                pagerState.currentPage - 1 == pageIdx && f < 0f -> {
+                    val g = -f
+                    cameraDistance = 10f * density
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)
+                    rotationY = 180f * g
+                    translationX = (1f - g) * w
+                    alpha = if (g < 0.5f) g * 2f else 1f
+                }
+            }
+        }
     }
     StaticPage(
         text = text,

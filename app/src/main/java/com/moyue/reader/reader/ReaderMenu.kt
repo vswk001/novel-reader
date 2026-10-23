@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +60,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.windowInsetsPadding
+import com.moyue.reader.data.repo.ReadMode
 import com.moyue.reader.data.repo.ReaderThemeKind
 
 private enum class ReaderSheet { TOC, BOOKMARK, SEARCH }
@@ -262,6 +264,18 @@ fun ReaderMenuOverlay(
                         }
                         MenuIconButton("下一章", Icons.Filled.KeyboardArrowDown, palette) {
                             vm.nextChapter()
+                        }
+                        MenuIconButton(
+                            if (ui.prefs.readMode == ReadMode.PAGE) "切滚动" else "切翻页",
+                            Icons.Filled.SwapVert,
+                            palette
+                        ) {
+                            vm.updatePrefs {
+                                it.copy(
+                                    readMode = if (it.readMode == ReadMode.PAGE) ReadMode.SCROLL
+                                    else ReadMode.PAGE
+                                )
+                            }
                         }
                     }
                 }

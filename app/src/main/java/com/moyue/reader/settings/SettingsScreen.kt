@@ -149,6 +149,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                             PageAnim.COVER -> "覆盖"
                                             PageAnim.FADE -> "淡入"
                                             PageAnim.NONE -> "无"
+                                            PageAnim.CURL -> "仿真"
                                         }
                                     )
                                 },

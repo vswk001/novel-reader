@@ -20,7 +20,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 enum class ReaderThemeKind { WHITE, SEPIA, GREEN, GRAY, BLACK }
 
 @Serializable
-enum class PageAnim { SLIDE, COVER, FADE, NONE }
+enum class PageAnim { SLIDE, COVER, FADE, NONE, CURL }
 
 @Serializable
 enum class SortKind { RECENT, TITLE, ADDED }

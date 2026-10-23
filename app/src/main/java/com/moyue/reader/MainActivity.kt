@@ -43,9 +43,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 音量键翻页：由阅读页注册处理器，未注册时走系统默认行为 */
+    /** 音量键翻页：由阅读页注册处理器；过滤按住不放产生的按键重复，避免连跳多页 */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             Graph.volumeKeyHandler?.let { handler ->
                 if (handler(event.keyCode)) return true
             }

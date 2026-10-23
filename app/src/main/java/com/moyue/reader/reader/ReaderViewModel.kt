@@ -134,16 +134,20 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     private fun paginate(s: LayoutSpec) {
         layoutJob?.cancel()
         layoutJob = viewModelScope.launch(Dispatchers.Default) {
-            val text = _ui.value.chapterText
+            val st = _ui.value
+            val text = st.chapterText
             val paint = TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 textSize = s.textSizePx
                 typeface = if (s.serif) Typeface.SERIF else Typeface.DEFAULT
             }
             val engine = PaginationEngine(paint, s.pageWidth, s.pageHeight, s.lineSpacing)
             val pages = engine.paginate(text)
-            val offset = pendingOffset ?: currentCharOffset()
+            // 偏移是全书绝对值，页表是章节内相对值：必须换算后再定位
+            val chapterStart = st.chapters.getOrNull(st.chapterIdx)?.charStart ?: 0
+            val absOffset = pendingOffset ?: currentCharOffset()
             pendingOffset = null
-            val idx = PaginationEngine.indexOfOffset(pages, offset)
+            val relOffset = (absOffset - chapterStart).coerceIn(0, text.length)
+            val idx = PaginationEngine.indexOfOffset(pages, relOffset)
             _ui.update { it.copy(pages = pages, pageIdx = idx, loading = false) }
         }
     }

@@ -176,7 +176,13 @@ fun BookshelfScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (space == 1) "墨阅 · 隐私空间" else "墨阅 · 书架") },
+                title = {
+                    Text(
+                        if (space == 1) "隐私空间" else "墨阅 · 书架",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 navigationIcon = {
                     if (space == 1 && onBack != null) {
                         IconButton(onClick = onBack) {

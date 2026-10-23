@@ -1,7 +1,7 @@
 package com.moyue.reader.data.importer
 
 /**
- * TXT 章节目录识别：多正则“竞选”，按章节数量与平均章节长度选出最合理的划分；
+ * TXT 章节目录识别：多正则"竞选"，按章节数量与平均章节长度选出最合理的划分；
  * 全部不合格时按固定字数分段兜底，保证任何书都能打开阅读。
  */
 object ChapterParser {
@@ -14,19 +14,27 @@ object ChapterParser {
     /** 兜底分段大小（字符） */
     private const val FALLBACK_CHUNK = 100_000
 
-    private val CH_NUM = "[0-9〇零一二两三四五六七八九十百千万亿]+"
+    /** 两个相邻标题的最小间隔（字符），过近视为误判（正文行被当标题） */
+    private const val MIN_HEADING_GAP = 200
+
+    private val CH_NUM = "[0-9〇零一二两三四五六七八九十百千万亿]{1,14}"
+    private val LEAD = "[ \\t　【（\\[]?"
+    private val TAIL = "[ \\t　】）\\]]?"
 
     private val PATTERNS: List<Regex> = listOf(
-        // 第一章 xxx / 第 12 卷-xxx / 第三节：xxx
-        Regex("""^[ \t　]{0,8}第\s*$CH_NUM\s*[章节卷集部回篇幕][^\n]{0,60}[ \t　]*$"""),
-        // 序章 / 楔子 / 尾声 / 番外篇 / 后记
-        Regex("""^[ \t　]{0,8}(序章|序言|楔子|引子|尾声|终章|后记|完本感言|番外篇?([ 　：:][^\n]{0,25})?)[ \t　]*$"""),
-        // Chapter 12 / CHAPTER I
+        // 第一章 xxx / 第 12 卷：xxx / 【第1章】觉醒 / 第三节：xxx
+        Regex("""^${LEAD}第\s*$CH_NUM\s*[章节卷集部回篇幕][^\n]{0,60}$TAIL$"""),
+        // 序章 / 楔子 / 尾声 / 后记 / 番外 / 番外篇 / 番外3 / 番外·xxx
+        Regex(
+            """^${LEAD}(序章|序言|楔子|引子|尾声|终章|后记|完本感言|""" +
+                """番外篇?([0-9〇一二三四五六七八九十]{0,4})([ 　:：·\-—.．][^\n]{0,25})?)$TAIL$"""
+        ),
+        // Chapter 12 / CHAPTER I The Beginning
         Regex("""^[ \t　]{0,8}[Cc][Hh][Aa][Pp][Tt][Ee][Rr]\s+\d{1,5}([ .:：][^\n]{0,50})?[ \t　]*$"""),
         // 卷一 / 卷三 风起（行内容太短太长都不算）
-        Regex("""^[ \t　]{0,8}卷\s*$CH_NUM([ 　][^\n]{0,20})?[ \t　]*$"""),
-        // 12、标题 / 12. 标题 / 12．标题（纯数字编号行）
-        Regex("""^[ \t　]{0,8}\d{1,4}[、.．,，:：]\s*\S[^\n]{0,40}[ \t　]*$""")
+        Regex("""^${LEAD}卷\s*$CH_NUM([ 　][^\n]{0,20})?$TAIL$"""),
+        // 12、标题 / 12. 标题 / 12．标题（纯数字编号行；以句末标点结尾的正文行不算标题）
+        Regex("""^[ \t　]{0,8}\d{1,4}[、.．,，:：]\s*\S[^\n。！？…""]{0,40}[ \t　]*$""")
     )
 
     /**
@@ -41,11 +49,13 @@ object ChapterParser {
             .flatMap { it.second }
             .distinctBy { it.start }
             .sortedBy { it.start }
+            .let { dropTooClose(it) }
 
         val valid = mutableListOf<List<Heading>>()
         if (candidate(union, text.length)) valid += union
         perPattern.forEach { (_, hs) ->
-            if (candidate(hs, text.length)) valid += hs
+            val filtered = dropTooClose(hs)
+            if (candidate(filtered, text.length)) valid += filtered
         }
         val best = valid.maxByOrNull { it.size } ?: emptyList()
 
@@ -71,6 +81,18 @@ object ChapterParser {
     }
 
     private class Heading(val title: String, val start: Int)
+
+    /** 相邻间隔小于 [MIN_HEADING_GAP] 的标题视为误判，保留前者 */
+    private fun dropTooClose(headings: List<Heading>): List<Heading> {
+        if (headings.size < 2) return headings
+        val out = mutableListOf<Heading>()
+        for (h in headings) {
+            if (out.isEmpty() || h.start - out.last().start >= MIN_HEADING_GAP) {
+                out += h
+            }
+        }
+        return out
+    }
 
     private fun findHeadings(text: String, pattern: Regex): List<Heading> {
         val out = mutableListOf<Heading>()
