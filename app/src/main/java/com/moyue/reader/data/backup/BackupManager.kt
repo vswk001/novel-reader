@@ -48,6 +48,7 @@ class BackupManager(
         val lastReadAt: Long,
         val pinned: Boolean,
         val coverHue: Int,
+        val space: Int = 0,
         val bookmarks: List<BackupBookmark>
     )
 
@@ -64,7 +65,7 @@ class BackupManager(
 
     suspend fun exportTo(uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            val books = repo.booksOnce()
+            val books = repo.booksAll()
             val payload = BackupData(
                 exportedAt = System.currentTimeMillis(),
                 prefs = settings.current(),
@@ -88,7 +89,7 @@ class BackupManager(
                 ?: error("无法读取备份文件")
             val data = json.decodeFromString(BackupData.serializer(), text)
             runCatching { settings.update { data.prefs } }
-            val local = repo.booksOnce()
+            val local = repo.booksAll()
             var matched = 0
             var merged = 0
             for (bk in data.books) {
@@ -134,6 +135,7 @@ private fun BookEntity.toBackup() = BackupManager.BackupBook(
     lastReadAt = lastReadAt,
     pinned = pinned,
     coverHue = coverHue,
+    space = space,
     bookmarks = emptyList()
 )
 

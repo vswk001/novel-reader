@@ -4,10 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -22,27 +18,18 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * 自动生成封面：书名首字 + 色调渐变。
- * 隐私模式下 [masked]=true 时改为固定灰渐变 + 锁图标，不泄露任何书名信息
- * （正常渐变色取自书名哈希，也一并隐藏）。
- */
+/** 自动生成封面：书名首字 + 色调渐变 */
 @Composable
 fun BookCover(
     title: String,
     hue: Int,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = 30.sp,
-    masked: Boolean = false
+    fontSize: TextUnit = 30.sp
 ) {
-    val brush = remember(hue, masked) {
-        if (masked) {
-            Brush.linearGradient(listOf(Color(0xFF6E6E6E), Color(0xFF3A3F44)))
-        } else {
-            val light = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.42f, 0.66f)))
-            val dark = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.52f, 0.42f)))
-            Brush.linearGradient(listOf(light, dark))
-        }
+    val brush = remember(hue) {
+        val light = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.42f, 0.66f)))
+        val dark = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.52f, 0.42f)))
+        Brush.linearGradient(listOf(light, dark))
     }
     Box(
         modifier
@@ -50,22 +37,13 @@ fun BookCover(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (masked) {
-                Icon(
-                    Icons.Filled.Lock,
-                    contentDescription = "已隐藏",
-                    tint = Color.White,
-                    modifier = Modifier.size(fontSize.value.dp)
-                )
-            } else {
-                Text(
-                    text = title.firstOrNull()?.toString() ?: "书",
-                    color = Color.White,
-                    fontSize = fontSize,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-            }
+            Text(
+                text = title.firstOrNull()?.toString() ?: "书",
+                color = Color.White,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
             Text(
                 text = "墨阅",
                 color = Color.White.copy(alpha = 0.55f),

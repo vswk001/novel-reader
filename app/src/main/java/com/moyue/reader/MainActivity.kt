@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 Graph.settingsRepository.prefs.collect { prefs ->
-                    if (prefs.privacyMode) {
+                    if (prefs.secureMode) {
                         window.setFlags(
                             WindowManager.LayoutParams.FLAG_SECURE,
                             WindowManager.LayoutParams.FLAG_SECURE

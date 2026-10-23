@@ -2,11 +2,13 @@ package com.moyue.reader.bookshelf
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,18 +23,22 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.AlertDialog
@@ -49,41 +55,61 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.repo.SortKind
+import com.moyue.reader.di.Graph
+import com.moyue.reader.privacy.PasswordDialog
+import com.moyue.reader.privacy.PasswordDialogKind
 import com.moyue.reader.ui.common.BookCover
-import com.moyue.reader.ui.common.BookMeta
 import com.moyue.reader.ui.common.fmtDuration
 import com.moyue.reader.ui.common.fmtSize
-import com.moyue.reader.ui.common.maskTitle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookshelfScreen(
     onOpenBook: (Long) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenStats: () -> Unit
+    onOpenStats: (Int) -> Unit,
+    onEnterPrivate: () -> Unit,
+    onBack: (() -> Unit)? = null
 ) {
     val vm: BookshelfViewModel = viewModel()
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val space = ui.space
+    val scope = rememberCoroutineScope()
 
     var showSearch by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showImportMenu by remember { mutableStateOf(false) }
+    var showPrivateMenu by remember { mutableStateOf(false) }
     var actionBook by remember { mutableStateOf<BookEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<BookEntity?>(null) }
+    var pwdKind by remember { mutableStateOf<PasswordDialogKind?>(null) }
 
     val pickFiles = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -93,16 +119,101 @@ fun BookshelfScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let { vm.scanFolder(it) } }
 
+    /** 下拉过半屏松开 → 进入隐私空间（未设密码则先引导设置） */
+    fun attemptEnterPrivate() {
+        scope.launch {
+            pwdKind = if (Graph.privacyRepository.hasPassword()) {
+                PasswordDialogKind.UNLOCK
+            } else {
+                PasswordDialogKind.SETUP
+            }
+        }
+    }
+
+    // ---------- 隐私空间下拉手势 ----------
+    val density = LocalDensity.current
+    val screenH = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val thresholdPx = screenH * 0.5f
+    val maxPullPx = screenH * 0.62f
+    var pullPx by remember { mutableFloatStateOf(0f) }
+    var snapJob by remember { mutableStateOf<Job?>(null) }
+    val pullEnabled = space == 0
+    val armed = pullPx >= thresholdPx
+
+    val pullConnection = remember(pullEnabled) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (!pullEnabled || source != NestedScrollSource.UserInput || available.y <= 0f) {
+                    return Offset.Zero
+                }
+                snapJob?.cancel()
+                pullPx = (pullPx + available.y).coerceIn(0f, maxPullPx)
+                return Offset(0f, available.y)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullPx > 0f) {
+                    val go = pullPx >= thresholdPx
+                    val from = pullPx
+                    snapJob = scope.launch {
+                        animate(from, 0f) { v, _ -> pullPx = v }
+                    }
+                    if (go) attemptEnterPrivate()
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("墨阅 · 书架") },
+                title = { Text(if (space == 1) "墨阅 · 隐私空间" else "墨阅 · 书架") },
+                navigationIcon = {
+                    if (space == 1 && onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出隐私空间")
+                        }
+                    }
+                },
+                colors = if (space == 1) {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                } else {
+                    TopAppBarDefaults.topAppBarColors()
+                },
                 actions = {
-                    IconButton(onClick = { vm.togglePrivacy() }) {
-                        Icon(
-                            if (ui.prefs.privacyMode) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                            contentDescription = "隐私模式"
-                        )
+                    if (space == 1) {
+                        IconButton(onClick = { showPrivateMenu = true }) {
+                            Icon(Icons.Filled.Key, contentDescription = "隐私空间设置")
+                        }
+                        DropdownMenu(
+                            expanded = showPrivateMenu,
+                            onDismissRequest = { showPrivateMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("修改密码") },
+                                onClick = {
+                                    showPrivateMenu = false
+                                    pwdKind = PasswordDialogKind.CHANGE
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("退出隐私空间") },
+                                onClick = {
+                                    showPrivateMenu = false
+                                    onBack?.invoke()
+                                }
+                            )
+                        }
                     }
                     IconButton(onClick = { showSearch = !showSearch; if (!showSearch) vm.setQuery("") }) {
                         Icon(Icons.Filled.Search, contentDescription = "搜索")
@@ -130,7 +241,7 @@ fun BookshelfScreen(
                             contentDescription = "切换视图"
                         )
                     }
-                    IconButton(onClick = onOpenStats) {
+                    IconButton(onClick = { onOpenStats(space) }) {
                         Icon(Icons.Filled.Insights, contentDescription = "阅读统计")
                     }
                     IconButton(onClick = onOpenSettings) {
@@ -143,144 +254,187 @@ fun BookshelfScreen(
             ExtendedFloatingActionButton(
                 onClick = { showImportMenu = true },
                 icon = { Icon(Icons.Filled.UploadFile, contentDescription = null) },
-                text = { Text("导入图书") }
+                text = { Text(if (space == 1) "导入到隐私空间" else "导入图书") }
             )
         }
     ) { padding ->
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .nestedScroll(pullConnection)
         ) {
-            if (ui.importing) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-            ui.message?.let { msg ->
-                Row(
+            // ---- 下拉提示（仅普通书架） ----
+            if (space == 0) {
+                Column(
                     Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp)
+                        .graphicsLayer {
+                            alpha = ((pullPx - 30f) / thresholdPx).coerceIn(0f, 1f)
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        msg,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                    Icon(
+                        Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = if (armed) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    TextButton(onClick = { vm.clearMessage() }) { Text("关闭") }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (armed) "松开进入隐私空间" else "下拉进入隐私空间",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (armed) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { (pullPx / thresholdPx).coerceIn(0f, 1f) },
+                        modifier = Modifier.width(140.dp)
+                    )
                 }
-            }
-            if (showSearch) {
-                OutlinedTextField(
-                    value = ui.query,
-                    onValueChange = { vm.setQuery(it) },
-                    placeholder = { Text("搜索书名") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                )
             }
 
-            val books = ui.visible
-            if (books.isEmpty()) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("书架空空如也", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
+            // ---- 内容（随下拉轻微下移，形成橡皮筋效果） ----
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationY = pullPx * 0.3f }
+            ) {
+                if (ui.importing) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                ui.message?.let { msg ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            "点击右下角「导入图书」，选择手机中的 txt 文件\n支持自动识别编码与章节目录",
+                            msg,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
+                        TextButton(onClick = { vm.clearMessage() }) { Text("关闭") }
                     }
                 }
-            } else if (ui.prefs.bookshelfGrid) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 104.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(books, key = { it.id }) { book ->
-                        val displayTitle = maskTitle(book.title, ui.prefs.privacyMode)
-                        Column(
-                            Modifier.combinedClickable(
-                                onClick = { onOpenBook(book.id) },
-                                onLongClick = { actionBook = book }
-                            )
-                        ) {
-                            BookCover(
-                                title = book.title,
-                                hue = book.coverHue,
-                                masked = ui.prefs.privacyMode,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(0.72f)
-                            )
-                            Spacer(Modifier.height(4.dp))
+                if (showSearch) {
+                    OutlinedTextField(
+                        value = ui.query,
+                        onValueChange = { vm.setQuery(it) },
+                        placeholder = { Text("搜索书名") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+
+                val books = ui.visible
+                if (books.isEmpty()) {
+                    // verticalScroll 使空书架也支持下拉进入隐私空间
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(32.dp)
+                            .verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                if (book.pinned) "📌 $displayTitle" else displayTitle,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall
+                                if (space == 1) "隐私空间是空的" else "书架空空如也",
+                                style = MaterialTheme.typography.titleMedium
                             )
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                progressText(book),
-                                style = MaterialTheme.typography.labelSmall,
+                                if (space == 1) {
+                                    "点击右下角导入，书籍只存在于隐私空间\n通过长按可在两个空间之间转移"
+                                } else {
+                                    "点击右下角「导入图书」，选择手机中的 txt 文件\n支持自动识别编码与章节目录"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 12.dp, vertical = 8.dp
-                    ),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(books, key = { it.id }) { book ->
-                        val displayTitle = maskTitle(book.title, ui.prefs.privacyMode)
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
+                } else if (ui.prefs.bookshelfGrid) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 104.dp),
+                        contentPadding = PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(books, key = { it.id }) { book ->
+                            Column(
+                                Modifier.combinedClickable(
                                     onClick = { onOpenBook(book.id) },
                                     onLongClick = { actionBook = book }
                                 )
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BookCover(
-                                title = book.title,
-                                hue = book.coverHue,
-                                fontSize = 20.sp,
-                                masked = ui.prefs.privacyMode,
-                                modifier = Modifier.size(width = 52.dp, height = 72.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
+                            ) {
+                                BookCover(
+                                    title = book.title,
+                                    hue = book.coverHue,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(0.72f)
+                                )
+                                Spacer(Modifier.height(4.dp))
                                 Text(
-                                    if (book.pinned) "📌 $displayTitle" else displayTitle,
+                                    if (book.pinned) "📌 ${book.title}" else book.title,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
-                                    "${progressText(book)} · ${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)}",
+                                    progressText(book),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(books, key = { it.id }) { book ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = { onOpenBook(book.id) },
+                                        onLongClick = { actionBook = book }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                BookCover(
+                                    title = book.title,
+                                    hue = book.coverHue,
+                                    fontSize = 20.sp,
+                                    modifier = Modifier.size(width = 52.dp, height = 72.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        if (book.pinned) "📌 ${book.title}" else book.title,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        "${progressText(book)} · ${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -289,11 +443,32 @@ fun BookshelfScreen(
         }
     }
 
+    // ---------- 密码对话框 ----------
+    pwdKind?.let { kind ->
+        PasswordDialog(
+            kind = kind,
+            onDismiss = { pwdKind = null },
+            onDone = {
+                when (kind) {
+                    PasswordDialogKind.UNLOCK -> {
+                        pwdKind = null
+                        onEnterPrivate()
+                    }
+                    PasswordDialogKind.SETUP -> {
+                        pwdKind = null
+                        onEnterPrivate()
+                    }
+                    PasswordDialogKind.CHANGE -> pwdKind = null
+                }
+            }
+        )
+    }
+
     // 导入菜单
     if (showImportMenu) {
         AlertDialog(
             onDismissRequest = { showImportMenu = false },
-            title = { Text("导入本地图书") },
+            title = { Text("导入图书") },
             text = { Text("支持 txt / log / md 文本文件，自动识别编码（GBK/UTF-8/UTF-16）与章节目录。") },
             confirmButton = {
                 Column {
@@ -325,7 +500,7 @@ fun BookshelfScreen(
     actionBook?.let { book ->
         AlertDialog(
             onDismissRequest = { actionBook = null },
-            title = { Text(maskTitle(book.title, ui.prefs.privacyMode)) },
+            title = { Text(book.title) },
             text = {
                 Column {
                     Text("章节：${book.chapterCount}　字符：${book.totalChars}")
@@ -335,6 +510,18 @@ fun BookshelfScreen(
             },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        vm.moveBook(book, 1 - space)
+                        actionBook = null
+                    }) {
+                        Icon(
+                            if (space == 1) Icons.Filled.SwapVert else Icons.Filled.DriveFileMove,
+                            contentDescription = null,
+                            Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (space == 1) "移回普通书架" else "移入隐私空间")
+                    }
                     TextButton(onClick = {
                         vm.togglePin(book)
                         actionBook = null
@@ -347,7 +534,7 @@ fun BookshelfScreen(
                         deleteTarget = book
                         actionBook = null
                     }) {
-                        Icon(Icons.Filled.DriveFileMove, contentDescription = null, Modifier.size(18.dp))
+                        Icon(Icons.Filled.Delete, contentDescription = null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("移出书架 / 删除")
                     }

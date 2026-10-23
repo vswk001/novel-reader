@@ -27,9 +27,3 @@ fun fmtDateTime(epochMillis: Long): String =
         "yyyy-MM-dd HH:mm",
         Locale.getDefault()
     ).format(Date(epochMillis))
-
-/** 隐私模式下对外展示的书名占位 */
-const val PRIVACY_MASK_TITLE = "🔒 私密图书"
-
-fun maskTitle(title: String, privacyMode: Boolean): String =
-    if (privacyMode) PRIVACY_MASK_TITLE else title

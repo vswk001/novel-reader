@@ -45,8 +45,7 @@ data class ReaderPrefs(
     val brightnessFollowSystem: Boolean = true,
     /** 0.02..1.0，仅作用于本应用窗口 */
     val brightness: Float = 0.5f,
-    /** 隐私模式：禁止截屏/最近任务预览，书架与统计隐藏书名封面 */
-    val privacyMode: Boolean = false,
+    val secureMode: Boolean = false,
     val sortBy: SortKind = SortKind.RECENT,
     val bookshelfGrid: Boolean = true
 )
@@ -67,7 +66,7 @@ class SettingsRepository(private val context: Context) {
         val keepScreenOn = booleanPreferencesKey("keep_screen_on")
         val brightnessFollowSystem = booleanPreferencesKey("brightness_follow_system")
         val brightness = floatPreferencesKey("brightness")
-        val privacyMode = booleanPreferencesKey("privacy_mode")
+        val secureMode = booleanPreferencesKey("secure_mode")
         val sortBy = stringPreferencesKey("sort_by")
         val bookshelfGrid = booleanPreferencesKey("bookshelf_grid")
     }
@@ -87,7 +86,7 @@ class SettingsRepository(private val context: Context) {
             keepScreenOn = p[Keys.keepScreenOn] ?: true,
             brightnessFollowSystem = p[Keys.brightnessFollowSystem] ?: true,
             brightness = p[Keys.brightness] ?: 0.5f,
-            privacyMode = p[Keys.privacyMode] ?: false,
+            secureMode = p[Keys.secureMode] ?: false,
             sortBy = enumOrDefault(p[Keys.sortBy], SortKind.RECENT),
             bookshelfGrid = p[Keys.bookshelfGrid] ?: true
         )
@@ -112,7 +111,7 @@ class SettingsRepository(private val context: Context) {
             p[Keys.keepScreenOn] = new.keepScreenOn
             p[Keys.brightnessFollowSystem] = new.brightnessFollowSystem
             p[Keys.brightness] = new.brightness
-            p[Keys.privacyMode] = new.privacyMode
+            p[Keys.secureMode] = new.secureMode
             p[Keys.sortBy] = new.sortBy.name
             p[Keys.bookshelfGrid] = new.bookshelfGrid
         }
@@ -132,7 +131,7 @@ class SettingsRepository(private val context: Context) {
         keepScreenOn = p[Keys.keepScreenOn] ?: true,
         brightnessFollowSystem = p[Keys.brightnessFollowSystem] ?: true,
         brightness = p[Keys.brightness] ?: 0.5f,
-        privacyMode = p[Keys.privacyMode] ?: false,
+        secureMode = p[Keys.secureMode] ?: false,
         sortBy = enumOrDefault(p[Keys.sortBy], SortKind.RECENT),
         bookshelfGrid = p[Keys.bookshelfGrid] ?: true
     )

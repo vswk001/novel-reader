@@ -6,6 +6,7 @@ import com.moyue.reader.data.db.AppDatabase
 import com.moyue.reader.data.importer.BookImporter
 import com.moyue.reader.data.repo.BookRepository
 import com.moyue.reader.data.repo.SettingsRepository
+import com.moyue.reader.privacy.PrivacyRepository
 
 /** 轻量服务定位器：应用规模小，不引入 Hilt */
 object Graph {
@@ -21,6 +22,7 @@ object Graph {
     val backupManager: BackupManager by lazy {
         BackupManager(appContext, bookRepository, settingsRepository)
     }
+    val privacyRepository: PrivacyRepository by lazy { PrivacyRepository(appContext) }
 
     /** 阅读页注册的音量键处理器，返回 true 表示已消费 */
     @Volatile

@@ -28,8 +28,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -96,15 +94,6 @@ fun ReaderMenuOverlay(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = {
-                    vm.updatePrefs { it.copy(privacyMode = !it.privacyMode) }
-                }) {
-                    Icon(
-                        if (ui.prefs.privacyMode) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                        contentDescription = "隐私模式",
-                        tint = palette.menuText
-                    )
-                }
                 IconButton(onClick = { vm.addBookmarkAtCurrentPage() }) {
                     Icon(
                         Icons.Filled.StarBorder,

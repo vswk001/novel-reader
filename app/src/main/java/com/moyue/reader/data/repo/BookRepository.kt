@@ -24,7 +24,7 @@ class BookRepository(
     private val bookmarkDao = db.bookmarkDao()
     private val statDao = db.readStatDao()
 
-    val books: Flow<List<BookEntity>> = bookDao.observeAll()
+    fun observeBooks(space: Int): Flow<List<BookEntity>> = bookDao.observeAll(space)
 
     fun observeBook(id: Long): Flow<BookEntity?> = bookDao.observe(id)
 
@@ -34,7 +34,10 @@ class BookRepository(
 
     suspend fun getBook(id: Long): BookEntity? = bookDao.get(id)
 
-    suspend fun booksOnce(): List<BookEntity> = bookDao.getAllOnce()
+    suspend fun booksOnce(space: Int): List<BookEntity> = bookDao.getAllOnce(space)
+
+    /** 全部空间的书籍（备份导出用） */
+    suspend fun booksAll(): List<BookEntity> = bookDao.getAll()
 
     suspend fun bookmarksOnce(bookId: Long): List<BookmarkEntity> = bookmarkDao.listForBook(bookId)
 
@@ -44,8 +47,11 @@ class BookRepository(
 
     suspend fun listChapters(bookId: Long): List<ChapterEntity> = chapterDao.list(bookId)
 
-    suspend fun isDuplicate(title: String, sizeBytes: Long): Boolean =
-        bookDao.countDuplicate(title, sizeBytes) > 0
+    suspend fun isDuplicate(title: String, sizeBytes: Long, space: Int): Boolean =
+        bookDao.countDuplicate(title, sizeBytes, space) > 0
+
+    /** 在普通书架与隐私空间之间转移书籍（文件、进度、书签保持不变） */
+    suspend fun setSpace(bookId: Long, space: Int) = bookDao.setSpace(bookId, space)
 
     suspend fun createBook(
         title: String,
@@ -53,7 +59,8 @@ class BookRepository(
         sizeBytes: Long,
         charset: String,
         totalChars: Int,
-        chapterCount: Int
+        chapterCount: Int,
+        space: Int = 0
     ): Long {
         val hue = ((title.hashCode() % 360) + 360) % 360
         val now = System.currentTimeMillis()
@@ -67,7 +74,8 @@ class BookRepository(
                 chapterCount = chapterCount,
                 addedAt = now,
                 lastReadAt = now,
-                coverHue = hue
+                coverHue = hue,
+                space = space
             )
         )
     }

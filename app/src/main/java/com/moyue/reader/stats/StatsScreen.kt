@@ -30,41 +30,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moyue.reader.data.db.BookEntity
-import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.di.Graph
 import com.moyue.reader.ui.common.BookCover
 import com.moyue.reader.ui.common.fmtDuration
 import com.moyue.reader.ui.common.fmtSize
-import com.moyue.reader.ui.common.maskTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen(onBack: () -> Unit) {
+fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
     data class StatsData(
         val todayMillis: Long = 0,
         val totalMillis: Long = 0,
         val books: List<BookEntity> = emptyList()
     )
 
-    // 隐私模式下排行中的书名/封面同样隐藏
-    val prefs by Graph.settingsRepository.prefs
-        .collectAsStateWithLifecycle(initialValue = ReaderPrefs())
-
-    val stats by produceState(initialValue = StatsData()) {
+    val stats by produceState(initialValue = StatsData(), space) {
         val repo = Graph.bookRepository
         value = StatsData(
             todayMillis = repo.readStatToday(),
             totalMillis = repo.readTimeTotalMillis(),
-            books = repo.booksOnce().sortedByDescending { it.readTimeMillis }.take(20)
+            books = repo.booksOnce(space).sortedByDescending { it.readTimeMillis }.take(20)
         )
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("阅读统计") },
+                title = { Text(if (space == 1) "隐私空间 · 阅读统计" else "阅读统计") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -140,17 +133,13 @@ fun StatsScreen(onBack: () -> Unit) {
                                 title = book.title,
                                 hue = book.coverHue,
                                 fontSize = 14.sp,
-                                masked = prefs.privacyMode,
                                 modifier = Modifier
                                     .width(30.dp)
                                     .height(42.dp)
                             )
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(
-                                    maskTitle(book.title, prefs.privacyMode),
-                                    maxLines = 1
-                                )
+                                Text(book.title, maxLines = 1)
                                 Text(
                                     "${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)}",
                                     style = MaterialTheme.typography.labelSmall,

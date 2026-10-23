@@ -3,6 +3,7 @@ package com.moyue.reader.bookshelf
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.repo.ReaderPrefs
@@ -15,14 +16,22 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class BookshelfViewModel(app: Application) : AndroidViewModel(app) {
+/**
+ * 书架 ViewModel：space=0 普通书架，space=1 隐私空间。
+ * 两个空间使用各自的页面路由，ViewModel 实例与数据完全独立。
+ */
+class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : AndroidViewModel(app) {
+
+    val space: Int = (savedState.get<String>("space")?.toIntOrNull() ?: 0).let {
+        if (it in 0..1) it else 0
+    }
 
     data class UiState(
+        val space: Int = 0,
         val books: List<BookEntity> = emptyList(),
         val prefs: ReaderPrefs = ReaderPrefs(),
         val query: String = "",
         val importing: Boolean = false,
-        val scanning: Boolean = false,
         val message: String? = null
     ) {
         val visible: List<BookEntity>
@@ -47,13 +56,13 @@ class BookshelfViewModel(app: Application) : AndroidViewModel(app) {
     private val query = MutableStateFlow("")
     private val busy = MutableStateFlow(false)
 
-    private val _ui = MutableStateFlow(UiState())
+    private val _ui = MutableStateFlow(UiState(space = space))
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
     init {
         viewModelScope.launch {
-            combine(repo.books, settings.prefs, query, busy) { books, prefs, q, b ->
-                UiState(books = books, prefs = prefs, query = q, importing = b)
+            combine(repo.observeBooks(space), settings.prefs, query, busy) { books, prefs, q, b ->
+                UiState(space = space, books = books, prefs = prefs, query = q, importing = b)
             }.collect { _ui.value = it }
         }
     }
@@ -70,7 +79,7 @@ class BookshelfViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
             busy.value = true
-            val results = importer.importUris(uris)
+            val results = importer.importUris(uris, space)
             val ok = results.count { it.ok }
             val failed = results.filter { !it.ok }
             val msg = buildString {
@@ -95,7 +104,7 @@ class BookshelfViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update { it.copy(message = "该文件夹中没有找到支持的文件（txt/log/md）") }
             } else {
                 _ui.update { it.copy(message = "扫描到 ${uris.size} 个文件，开始导入…") }
-                val results = importer.importUris(uris)
+                val results = importer.importUris(uris, space)
                 val ok = results.count { it.ok }
                 busy.value = false
                 _ui.update {
@@ -115,7 +124,25 @@ class BookshelfViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteBook(book: BookEntity, deleteFile: Boolean) {
         viewModelScope.launch {
             repo.deleteBook(book, deleteFile)
-            _ui.update { it.copy(message = if (deleteFile) "已删除「${book.title}」" else "已移出书架（文件保留）" ) }
+            _ui.update {
+                it.copy(
+                    message = if (deleteFile) "已删除「${book.title}」"
+                    else "已移出书架（文件保留）"
+                )
+            }
+        }
+    }
+
+    /** 在普通书架与隐私空间之间转移 */
+    fun moveBook(book: BookEntity, toSpace: Int) {
+        viewModelScope.launch {
+            repo.setSpace(book.id, toSpace)
+            _ui.update {
+                it.copy(
+                    message = if (toSpace == 1) "已移入隐私空间「${book.title}」"
+                    else "已移回普通书架「${book.title}」"
+                )
+            }
         }
     }
 
@@ -125,9 +152,5 @@ class BookshelfViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleGridView() {
         viewModelScope.launch { settings.update { it.copy(bookshelfGrid = !it.bookshelfGrid) } }
-    }
-
-    fun togglePrivacy() {
-        viewModelScope.launch { settings.update { it.copy(privacyMode = !it.privacyMode) } }
     }
 }

@@ -234,12 +234,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            SectionTitle("隐私")
+            SectionTitle("隐私与安全")
             PrefSwitch(
-                label = "隐私模式",
-                subtitle = "禁止截屏与最近任务预览；书架和统计中隐藏书名与封面",
-                checked = prefs.privacyMode,
-                onChange = { v -> update { it.copy(privacyMode = v) } }
+                label = "禁止截屏",
+                subtitle = "开启后截屏/录屏黑屏，最近任务无预览（FLAG_SECURE）",
+                checked = prefs.secureMode,
+                onChange = { v -> update { it.copy(secureMode = v) } }
+            )
+            Text(
+                "隐私空间：在书架页面下拉过半屏松开即可进入；首次进入需设置数字或图案密码，两个空间的书籍完全独立。",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))

@@ -21,7 +21,9 @@ data class BookEntity(
     val readTimeMillis: Long = 0L,
     val pinned: Boolean = false,
     /** 封面渐变色调 0..360 */
-    val coverHue: Int = 0
+    val coverHue: Int = 0,
+    /** 所属空间：0=普通书架，1=隐私空间（完全独立管理） */
+    val space: Int = 0
 )
 
 @Entity(tableName = "chapters", primaryKeys = ["bookId", "idx"])

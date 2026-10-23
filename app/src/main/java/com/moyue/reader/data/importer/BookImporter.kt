@@ -21,10 +21,10 @@ class BookImporter(
         private const val MAX_FILE_BYTES = 256L * 1024 * 1024
     }
 
-    suspend fun importUris(uris: List<Uri>): List<ImportResult> =
-        uris.map { importUri(it) }
+    suspend fun importUris(uris: List<Uri>, space: Int = 0): List<ImportResult> =
+        uris.map { importUri(it, space) }
 
-    suspend fun importUri(uri: Uri): ImportResult = withContext(Dispatchers.IO) {
+    suspend fun importUri(uri: Uri, space: Int = 0): ImportResult = withContext(Dispatchers.IO) {
         val name = queryName(uri) ?: "未知文件.txt"
         try {
             if (querySize(uri) > MAX_FILE_BYTES) {
@@ -32,7 +32,7 @@ class BookImporter(
             }
             val title = name.substringBeforeLast('.')
             val size = querySize(uri)
-            if (repo.isDuplicate(title, size)) {
+            if (repo.isDuplicate(title, size, space)) {
                 return@withContext ImportResult(name, false, "已在书架中")
             }
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -51,7 +51,8 @@ class BookImporter(
                 sizeBytes = size,
                 charset = charsetName,
                 totalChars = text.length,
-                chapterCount = chapters.size
+                chapterCount = chapters.size,
+                space = space
             )
             try {
                 repo.writeBookFile(bookId, text)
