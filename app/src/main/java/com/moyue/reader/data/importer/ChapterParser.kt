@@ -9,7 +9,7 @@ object ChapterParser {
     data class Chapter(val title: String, val charStart: Int, val charEnd: Int)
 
     /** 章节标题行的长度上限（超长行直接跳过正则，兼顾性能与误判） */
-    private const val MAX_TITLE_LINE = 80
+    private const val MAX_TITLE_LINE = 100
 
     /** 兜底分段大小（字符） */
     private const val FALLBACK_CHUNK = 100_000
@@ -17,24 +17,29 @@ object ChapterParser {
     /** 两个相邻标题的最小间隔（字符），过近视为误判（正文行被当标题） */
     private const val MIN_HEADING_GAP = 200
 
-    private val CH_NUM = "[0-9〇零一二两三四五六七八九十百千万亿]{1,14}"
-    private val LEAD = "[ \\t　【（\\[]?"
-    private val TAIL = "[ \\t　】）\\]]?"
+    /** 章节号：半角/全角数字 + 中文数字 */
+    private val CH_NUM = "[0-9０-９〇零一二两三四五六七八九十百千万亿]{1,14}"
+
+    /** 标题行首/行尾允许的装饰：空白、常见装饰符、包裹符号 */
+    private val LEAD = "[ \\t　★☆◆◇●○■□▲△※·]{0,4}[【（\\[「《]?"
+    private val TAIL = "[ \\t　★☆◆◇●○■□▲△※·】）\\]」》]?"
 
     private val PATTERNS: List<Regex> = listOf(
-        // 第一章 xxx / 第 12 卷：xxx / 【第1章】觉醒 / 第三节：xxx
-        Regex("""^${LEAD}第\s*$CH_NUM\s*[章节卷集部回篇幕][^\n]{0,60}$TAIL$"""),
-        // 序章 / 楔子 / 尾声 / 后记 / 番外 / 番外篇 / 番外3 / 番外·xxx
+        // 第一章 xxx / 第 12 卷：xxx / 【第1章】觉醒 / ★第一章★ / 第１２章（全角数字）
+        Regex("""^${LEAD}第\s*$CH_NUM\s*[章节卷集部回篇幕][^\n]{0,80}$TAIL$"""),
+        // 序章 / 楔子 / 尾声 / 后记 / 番外 / 番外篇 / 番外3 / 番外·xxx / 正文
         Regex(
-            """^${LEAD}(序章|序言|楔子|引子|尾声|终章|后记|完本感言|""" +
-                """番外篇?([0-9〇一二三四五六七八九十]{0,4})([ 　:：·\-—.．][^\n]{0,25})?)$TAIL$"""
+            """^${LEAD}(序章|序言|楔子|引子|尾声|终章|后记|完本感言|正文|""" +
+                """番外篇?([0-9０-９〇一二三四五六七八九十]{0,4})([ 　:：·\-—.．][^\n]{0,25})?)$TAIL$"""
         ),
         // Chapter 12 / CHAPTER I The Beginning
         Regex("""^[ \t　]{0,8}[Cc][Hh][Aa][Pp][Tt][Ee][Rr]\s+\d{1,5}([ .:：][^\n]{0,50})?[ \t　]*$"""),
         // 卷一 / 卷三 风起（行内容太短太长都不算）
         Regex("""^${LEAD}卷\s*$CH_NUM([ 　][^\n]{0,20})?$TAIL$"""),
         // 12、标题 / 12. 标题 / 12．标题（纯数字编号行；以句末标点结尾的正文行不算标题）
-        Regex("""^[ \t　]{0,8}\d{1,4}[、.．,，:：]\s*\S[^\n。！？…""]{0,40}[ \t　]*$""")
+        Regex("""^[ \t　]{0,8}\d{1,4}[、.．,，:：]\s*\S[^\n。！？…""]{0,40}[ \t　]*$"""),
+        // 001 标题（数字编号 + 空格 + 标题，无标点分隔；同样排除句末标点）
+        Regex("""^[ \t　]{0,8}[0-9０-９]{1,4}[ \t　]+\S[^\n。！？…""]{0,36}[ \t　]*$""")
     )
 
     /**
@@ -117,7 +122,7 @@ object ChapterParser {
     private fun candidate(headings: List<Heading>, totalLen: Int): Boolean {
         if (headings.size < 3) return false
         val avg = totalLen.toDouble() / headings.size
-        return avg in 800.0..300_000.0
+        return avg in 400.0..300_000.0
     }
 
     private fun fallback(text: String): List<Chapter> {

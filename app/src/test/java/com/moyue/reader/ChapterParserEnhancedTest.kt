@@ -84,4 +84,81 @@ class ChapterParserEnhancedTest {
         val chapters = ChapterParser.parse(text)
         assertEquals(4, chapters.size)
     }
+
+    // ---------- v1.6.1 放宽规则覆盖 ----------
+
+    @Test
+    fun `decorated headings with stars are recognized`() {
+        val text = buildString {
+            for (i in 1..4) {
+                append("\n★第${i}章★ 风云再起\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+        assertTrue(chapters[0].title.contains("第1章"))
+    }
+
+    @Test
+    fun `full width digit chapters are recognized`() {
+        val text = buildString {
+            for (i in 1..4) {
+                append("\n第１${i}章 全角标题\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+    }
+
+    @Test
+    fun `number space title format is recognized`() {
+        val text = buildString {
+            for (i in 1..5) {
+                append("\n00${i} 大梦初醒\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(5, chapters.size)
+        assertTrue(chapters[0].title.contains("大梦初醒"))
+    }
+
+    @Test
+    fun `leading whitespace before chapter word is allowed`() {
+        val text = buildString {
+            for (i in 1..4) {
+                append("\n    第${i}章 缩进标题\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+    }
+
+    @Test
+    fun `short chapters below 800 avg are still accepted`() {
+        val text = buildString {
+            for (i in 1..4) {
+                append("\n第${i}章 短章\n")
+                append(body(i, 500)) // 平均约 500 字/章（旧阈值 800 会整本拒绝）
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+    }
+
+    @Test
+    fun `longer titles up to 80 chars are recognized`() {
+        val longTitle = "这是一章特别特别长的标题" + "字".repeat(30) // 约 40+ 字
+        val text = buildString {
+            for (i in 1..4) {
+                append("\n第${i}章 $longTitle\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+    }
 }

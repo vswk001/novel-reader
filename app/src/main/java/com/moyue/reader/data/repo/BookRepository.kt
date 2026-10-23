@@ -53,6 +53,34 @@ class BookRepository(
     /** 在普通书架与隐私空间之间转移书籍（文件、进度、书签保持不变） */
     suspend fun setSpace(bookId: Long, space: Int) = bookDao.setSpace(bookId, space)
 
+    /**
+     * 用最新章节规则重新切分已导入书籍（基于应用内副本，无需源文件）。
+     * 阅读进度按字符偏移映射到新章节，不会丢失；EPUB 的结构化目录不参与重切。
+     * @return 新章节数
+     */
+    suspend fun reparseChapters(bookId: Long): Int = withContext(Dispatchers.IO) {
+        val book = bookDao.get(bookId) ?: error("书籍不存在")
+        if (book.charset == "EPUB") error("EPUB 书籍使用自带目录，无需重新切分")
+        val file = bookFile(bookId)
+        if (!file.exists()) error("应用内副本丢失，请删除后重新导入")
+        val text = file.readText(Charsets.UTF_8)
+        val chapters = withContext(Dispatchers.Default) { ChapterParser.parse(text) }
+        chapterDao.deleteForBook(bookId)
+        saveChapters(bookId, chapters, text)
+        // 进度：按字符偏移找到所在的新章节
+        val newIdx = chapters.indexOfFirst {
+            book.curCharOffset >= it.charStart && book.curCharOffset < it.charEnd
+        }.let { if (it >= 0) it else 0 }
+        bookDao.update(
+            book.copy(
+                totalChars = text.length,
+                chapterCount = chapters.size,
+                curChapter = newIdx
+            )
+        )
+        chapters.size
+    }
+
     suspend fun createBook(
         title: String,
         fileName: String,

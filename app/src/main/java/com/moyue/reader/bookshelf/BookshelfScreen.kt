@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
@@ -637,6 +638,16 @@ fun BookshelfScreen(
             },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
+                    if (book.charset != "EPUB") {
+                        TextButton(onClick = {
+                            vm.reparseBook(book)
+                            actionBook = null
+                        }) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("重新切分章节")
+                        }
+                    }
                     TextButton(onClick = {
                         vm.moveBook(book, 1 - space)
                         actionBook = null

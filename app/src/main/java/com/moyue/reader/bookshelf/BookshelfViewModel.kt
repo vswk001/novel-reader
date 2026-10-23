@@ -146,6 +146,16 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
         }
     }
 
+    /** 用最新章节规则重新切分（进度保留） */
+    fun reparseBook(book: BookEntity) {
+        viewModelScope.launch {
+            _ui.update { it.copy(message = "正在重新分析「${book.title}」的章节…") }
+            runCatching { repo.reparseChapters(book.id) }
+                .onSuccess { n -> _ui.update { it.copy(message = "重切完成：「${book.title}」共 $n 章（阅读进度已保留）") } }
+                .onFailure { e -> _ui.update { it.copy(message = "重切失败：${e.message}") } }
+        }
+    }
+
     fun setSort(kind: SortKind) {
         viewModelScope.launch { settings.update { it.copy(sortBy = kind) } }
     }
