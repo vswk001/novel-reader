@@ -37,6 +37,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -373,6 +374,23 @@ fun ReaderScreen(onBack: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = padH + 4.dp, vertical = 4.dp)
         )
+
+        // 操作反馈浮层（加书签等）
+        ui.transient?.let { msg ->
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = palette.menuBg.copy(alpha = 0.95f),
+                shadowElevation = 4.dp,
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Text(
+                    msg,
+                    color = palette.menuText,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
+        }
 
         // 菜单
         ReaderMenuOverlay(

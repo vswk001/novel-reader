@@ -48,7 +48,9 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val menuVisible: Boolean = false,
         val bookmarks: List<BookmarkEntity> = emptyList(),
         val searchResults: List<BookRepository.SearchHit>? = null,
-        val searching: Boolean = false
+        val searching: Boolean = false,
+        /** 短暂浮层提示（加书签等操作反馈），2 秒自动消失 */
+        val transient: String? = null
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -232,15 +234,34 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
 
     fun addBookmarkAtCurrentPage() {
         val st = _ui.value
-        val ch = st.chapters.getOrNull(st.chapterIdx) ?: return
-        val page = st.pages.getOrNull(st.pageIdx) ?: return
+        val ch = st.chapters.getOrNull(st.chapterIdx)
+        val page = st.pages.getOrNull(st.pageIdx)
+        if (ch == null || page == null) {
+            showTransient("页面尚未加载完成，请稍候")
+            return
+        }
+        val offset = ch.charStart + page.start
+        // 同一页去重：避免误以为没点上而连点产生重复书签
+        if (st.bookmarks.any { it.chapterIdx == st.chapterIdx && it.charOffset == offset }) {
+            showTransient("本页已在书签中")
+            return
+        }
         val from = page.start.coerceIn(0, st.chapterText.length)
         val to = page.end.coerceIn(0, st.chapterText.length)
         val excerpt = st.chapterText.substring(from, to)
             .replace('\n', ' ').trim().take(60)
             .ifBlank { ch.title }
         viewModelScope.launch {
-            repo.addBookmark(bookId, st.chapterIdx, ch.charStart + page.start, excerpt)
+            repo.addBookmark(bookId, st.chapterIdx, offset, excerpt)
+            showTransient("已添加书签")
+        }
+    }
+
+    fun showTransient(message: String) {
+        _ui.update { it.copy(transient = message) }
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            _ui.update { s -> if (s.transient == message) s.copy(transient = null) else s }
         }
     }
 
