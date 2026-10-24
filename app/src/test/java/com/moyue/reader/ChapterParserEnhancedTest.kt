@@ -161,4 +161,55 @@ class ChapterParserEnhancedTest {
         val chapters = ChapterParser.parse(text)
         assertEquals(4, chapters.size)
     }
+
+    // ---------- 用户实书回归：居中标题（大量行首全角空格） ----------
+
+    @Test
+    fun `centered chapter heading with full width spaces is recognized`() {
+        // 复刻实书：标题用全角空格居中，如 "　　　　　　第九章 神州铁律"
+        val text = buildString {
+            append("\n")
+            append("　　　　　　　　第一章 风起\n")
+            append(body(1))
+            append("\n　　　　　　　　第九章 神州铁律\n")
+            append(body(9))
+            append("\n　　　　　　　　第十章 出发\n")
+            append(body(10))
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(3, chapters.size)
+        assertEquals("第九章 神州铁律", chapters[1].title)
+    }
+
+    @Test
+    fun `centered heading with regular ascii spaces is recognized`() {
+        val text = buildString {
+            for (i in 1..4) {
+                append("\n                    第${i}章 半角空格居中\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+    }
+
+    @Test
+    fun `centered xuyan heading is recognized`() {
+        val text = buildString {
+            append("　　　　　　序章\n")
+            append(body(0))
+            for (i in 1..3) {
+                append("\n　　　　　　第${chineseNum(i)}章 继续\n")
+                append(body(i))
+            }
+        }
+        val chapters = ChapterParser.parse(text)
+        assertEquals(4, chapters.size)
+        assertEquals("序章", chapters[0].title)
+    }
+
+    private fun chineseNum(i: Int): String = when (i) {
+        1 -> "一"; 2 -> "二"; 3 -> "三"; 4 -> "四"; 5 -> "五"
+        else -> i.toString()
+    }
 }
