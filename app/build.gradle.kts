@@ -22,8 +22,8 @@ android {
         applicationId = "com.moyue.reader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.9.2"
+        versionCode = 19
+        versionName = "1.9.3"
     }
 
     signingConfigs {
@@ -59,6 +59,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"

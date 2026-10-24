@@ -433,7 +433,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
             // ---------- 关于 ----------
             SectionCard(stringResource(R.string.sec_about)) {
                 Text(
-                    stringResource(R.string.about_text),
+                    stringResource(R.string.about_text, com.moyue.reader.BuildConfig.VERSION_NAME),
                     fontSize = 13.sp,
                     lineHeight = 20.sp
                 )
