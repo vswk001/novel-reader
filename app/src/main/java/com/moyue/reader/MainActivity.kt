@@ -22,7 +22,8 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        handleExternalIntent(intent)
+        // 首次启动才处理外部打开/分享；系统回收后重建不重复导入
+        if (savedInstanceState == null) handleExternalIntent(intent)
 
         // 隐私模式：FLAG_SECURE 禁止截屏与最近任务预览，随设置实时生效
         lifecycleScope.launch {

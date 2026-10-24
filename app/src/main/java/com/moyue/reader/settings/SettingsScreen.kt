@@ -344,7 +344,8 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
 
             // ---------- 回收站 ----------
             var trash by remember { mutableStateOf<List<BookEntity>>(emptyList()) }
-            LaunchedEffect(space, message) {
+            var trashRev by remember { mutableStateOf(0) }
+            LaunchedEffect(space, trashRev) {
                 trash = Graph.bookRepository.listTrashed(space)
             }
             SectionCard(stringResource(R.string.trash_title)) {
@@ -389,6 +390,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                                 scope.launch {
                                     Graph.bookRepository.restoreFromTrash(b.id)
                                     message = context.getString(R.string.msg_trash_restored, b.title)
+                                    trashRev++
                                 }
                             }) {
                                 Icon(
@@ -401,6 +403,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                                 scope.launch {
                                     Graph.bookRepository.deleteBookById(b.id, deleteFile = true)
                                     message = context.getString(R.string.msg_deleted, b.title)
+                                    trashRev++
                                 }
                             }) {
                                 Icon(
@@ -416,6 +419,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                         scope.launch {
                             Graph.bookRepository.emptyTrash(space)
                             message = context.getString(R.string.trash_emptied)
+                            trashRev++
                         }
                     }) {
                         Text(

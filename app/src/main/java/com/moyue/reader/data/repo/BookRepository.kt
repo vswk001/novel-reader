@@ -71,10 +71,36 @@ class BookRepository(
         if (book.charset == "EPUB") error(context.getString(R.string.err_epub_no_reparse))
         val file = bookFile(bookId)
         if (!file.exists()) error(context.getString(R.string.err_copy_missing))
+        val oldChapters = chapterDao.list(bookId)
+        val oldHighlights = highlightDao.listForBook(bookId)
         val text = file.readText(Charsets.UTF_8)
         val chapters = withContext(Dispatchers.Default) { ChapterParser.parse(text) }
         chapterDao.deleteForBook(bookId)
         saveChapters(bookId, chapters, text)
+        // 高亮迁移：旧(章内区间) → 全书绝对偏移 → 新(章内区间)，错位则删除
+        if (oldHighlights.isNotEmpty()) {
+            val oldByIdx = oldChapters.associateBy { it.idx }
+            for (h in oldHighlights) {
+                val oldCh = oldByIdx[h.chapterIdx]
+                if (oldCh == null) {
+                    highlightDao.delete(h)
+                    continue
+                }
+                val absStart = oldCh.charStart + h.start
+                val absEnd = oldCh.charStart + h.end
+                val nIdx = chapters.indexOfFirst {
+                    absStart >= it.charStart && absStart < it.charEnd
+                }.let { if (it >= 0) it else 0 }
+                val nCh = chapters[nIdx]
+                val ns = (absStart - nCh.charStart).coerceIn(0, nCh.charEnd - nCh.charStart)
+                val ne = (absEnd - nCh.charStart).coerceIn(ns, nCh.charEnd - nCh.charStart)
+                if (ne > ns) {
+                    highlightDao.update(h.copy(chapterIdx = nIdx, start = ns, end = ne))
+                } else {
+                    highlightDao.delete(h)
+                }
+            }
+        }
         // 进度：按字符偏移找到所在的新章节
         val newIdx = chapters.indexOfFirst {
             book.curCharOffset >= it.charStart && book.curCharOffset < it.charEnd

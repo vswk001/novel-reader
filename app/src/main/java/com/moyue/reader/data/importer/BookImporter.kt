@@ -60,13 +60,15 @@ class BookImporter(
                     val normalized = TextNormalizer.normalize(c.text)
                     sb.append(normalized)
                     list += ChapterParser.Chapter(c.title, start, sb.length)
-                    // normalize 只动空白不删标记：按出现顺序重扫标记位置
+                    // normalize 只动空白不删标记：按出现顺序重扫标记位置。
+                    // 全书偏移 = 章起点 + 标题及换行占位 + normalized 内位置
+                    val textBase = start + c.title.length + 1
                     var hrefIdx = 0
                     var from = 0
                     while (hrefIdx < c.imageHrefs.size) {
                         val p = normalized.indexOf(EpubParser.MARKER, from)
                         if (p < 0) break
-                        imgPositions += Triple(ci, start + 1 + p, c.imageHrefs[hrefIdx])
+                        imgPositions += Triple(ci, textBase + p, c.imageHrefs[hrefIdx])
                         hrefIdx++
                         from = p + 1
                     }

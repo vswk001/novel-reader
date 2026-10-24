@@ -825,8 +825,8 @@ private fun ScrollReaderContent(
         }
     }
 
-    // 进度跟踪：当前页 = 视口顶部可见的页
-    LaunchedEffect(scrollState, ui.pages.size) {
+    // 进度跟踪：当前页 = 视口顶部可见的页（headerCount 变化需重启，否则映射偏移）
+    LaunchedEffect(scrollState, ui.pages.size, headerCount) {
         snapshotFlow { scrollState.firstVisibleItemIndex }.collect { first ->
             if (ui.pages.isNotEmpty()) {
                 vm.onPageSettled((first - headerCount).coerceIn(0, ui.pages.size - 1))
