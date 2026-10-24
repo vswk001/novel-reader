@@ -56,12 +56,14 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -89,8 +91,10 @@ import com.moyue.reader.data.repo.SortKind
 import com.moyue.reader.di.Graph
 import com.moyue.reader.privacy.PasswordDialog
 import com.moyue.reader.privacy.PasswordDialogKind
+import com.moyue.reader.ui.common.ActionRow
 import com.moyue.reader.ui.common.BookCover
 import com.moyue.reader.ui.common.BookProgressBar
+import com.moyue.reader.ui.common.MoyueDialog
 import com.moyue.reader.ui.common.fmtDuration
 import com.moyue.reader.ui.common.fmtSize
 import kotlinx.coroutines.Job
@@ -592,117 +596,126 @@ fun BookshelfScreen(
 
     // 导入菜单
     if (showImportMenu) {
-        AlertDialog(
+        MoyueDialog(
             onDismissRequest = { showImportMenu = false },
-            title = { Text("导入图书") },
-            text = { Text("支持 txt / log / md / epub，自动识别编码（GBK/UTF-8/UTF-16）、EPUB 目录与章节划分。") },
-            confirmButton = {
-                Column {
-                    TextButton(onClick = {
-                        showImportMenu = false
-                        pickFiles.launch(
-                            arrayOf("text/*", "application/epub+zip", "application/octet-stream")
-                        )
-                    }) {
-                        Icon(Icons.Filled.UploadFile, contentDescription = null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("选择文件（可多选）")
-                    }
-                    TextButton(onClick = {
-                        showImportMenu = false
-                        pickTree.launch(null)
-                    }) {
-                        Icon(Icons.Filled.FolderOpen, contentDescription = null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("扫描整个文件夹")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showImportMenu = false }) { Text("取消") }
+            title = "导入图书",
+            subtitle = "支持 txt / log / md / epub，自动识别编码（GBK/UTF-8/UTF-16）与章节目录。",
+            dismissText = "关闭"
+        ) {
+            ActionRow(
+                Icons.Filled.UploadFile,
+                "选择文件",
+                "可多选，从文件管理器挑选"
+            ) {
+                showImportMenu = false
+                pickFiles.launch(arrayOf("text/*", "application/epub+zip", "application/octet-stream"))
             }
-        )
+            ActionRow(
+                Icons.Filled.FolderOpen,
+                "扫描整个文件夹",
+                "递归查找文件夹内全部支持格式"
+            ) {
+                showImportMenu = false
+                pickTree.launch(null)
+            }
+        }
     }
 
-    // 长按操作
+    // 长按操作 → 底部动作表
     actionBook?.let { book ->
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { actionBook = null },
-            title = { Text(book.title) },
-            text = {
-                Column {
-                    Text("章节：${book.chapterCount}　字符：${book.totalChars}")
-                    Text("编码：${book.charset}　大小：${fmtSize(book.sizeBytes)}")
-                    Text("累计阅读：${fmtDuration(book.readTimeMillis)}")
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Row(
+                Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BookCover(
+                    title = book.title,
+                    hue = book.coverHue,
+                    fontSize = 12.sp,
+                    maxChars = 2,
+                    modifier = Modifier.size(width = 34.dp, height = 48.dp)
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        book.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)} · 已读 ${fmtDuration(book.readTimeMillis)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    if (book.charset != "EPUB") {
-                        TextButton(onClick = {
-                            vm.reparseBook(book)
-                            actionBook = null
-                        }) {
-                            Icon(Icons.Filled.Refresh, contentDescription = null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("重新切分章节")
-                        }
-                    }
-                    TextButton(onClick = {
-                        vm.moveBook(book, 1 - space)
-                        actionBook = null
-                    }) {
-                        Icon(
-                            if (space == 1) Icons.Filled.SwapVert else Icons.Filled.DriveFileMove,
-                            contentDescription = null,
-                            Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (space == 1) "移回普通书架" else "移入隐私空间")
-                    }
-                    TextButton(onClick = {
-                        vm.togglePin(book)
-                        actionBook = null
-                    }) {
-                        Icon(Icons.Filled.PushPin, contentDescription = null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (book.pinned) "取消置顶" else "置顶")
-                    }
-                    TextButton(onClick = {
-                        deleteTarget = book
-                        actionBook = null
-                    }) {
-                        Icon(Icons.Filled.Delete, contentDescription = null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("移出书架 / 删除")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { actionBook = null }) { Text("关闭") }
             }
-        )
+            Spacer(Modifier.height(8.dp))
+            if (book.charset != "EPUB") {
+                ActionRow(
+                    Icons.Filled.Refresh,
+                    "重新切分章节",
+                    "用最新规则重建目录，保留阅读进度"
+                ) {
+                    vm.reparseBook(book)
+                    actionBook = null
+                }
+            }
+            ActionRow(
+                if (space == 1) Icons.Filled.SwapVert else Icons.Filled.DriveFileMove,
+                if (space == 1) "移回普通书架" else "移入隐私空间",
+                "书籍文件与进度保持不变"
+            ) {
+                vm.moveBook(book, 1 - space)
+                actionBook = null
+            }
+            ActionRow(
+                Icons.Filled.PushPin,
+                if (book.pinned) "取消置顶" else "置顶",
+                "置顶书籍始终排在书架最前"
+            ) {
+                vm.togglePin(book)
+                actionBook = null
+            }
+            ActionRow(
+                Icons.Filled.Delete,
+                "移出书架 / 删除",
+                "可选择保留或删除应用内副本",
+                tint = MaterialTheme.colorScheme.error
+            ) {
+                deleteTarget = book
+                actionBook = null
+            }
+            Spacer(Modifier.height(16.dp))
+        }
     }
 
     // 删除确认
     deleteTarget?.let { book ->
-        AlertDialog(
+        MoyueDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除「${book.title}」") },
-            text = { Text("移出书架会保留应用内副本，删除文件则同时移除副本，均不可恢复。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.deleteBook(book, deleteFile = false)
-                    deleteTarget = null
-                }) { Text("仅移出书架") }
+            title = "删除「${book.title}」",
+            subtitle = "移出书架会保留应用内副本，删除文件则同时移除副本。删除后不可恢复。",
+            confirmText = "删除（含文件）",
+            onConfirm = {
+                vm.deleteBook(book, deleteFile = true)
+                deleteTarget = null
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    vm.deleteBook(book, deleteFile = true)
-                    deleteTarget = null
-                }) { Text("删除（含文件）") }
+            confirmDestructive = true
+        ) {
+            ActionRow(
+                Icons.Filled.DriveFileMove,
+                "仅移出书架",
+                "保留应用内副本，可重新导入恢复"
+            ) {
+                vm.deleteBook(book, deleteFile = false)
+                deleteTarget = null
             }
-        )
+        }
     }
 }
 

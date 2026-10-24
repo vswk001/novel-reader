@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moyue.reader.di.Graph
+import com.moyue.reader.ui.common.MoyueDialog
 import kotlinx.coroutines.launch
 
 enum class PasswordDialogKind { SETUP, UNLOCK, CHANGE }
@@ -125,11 +126,11 @@ fun PasswordDialog(
         is Stage.VerifyOld -> if (kind == PasswordDialogKind.CHANGE) "验证当前密码" else "输入隐私空间密码"
     }
 
-    AlertDialog(
+    MoyueDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        title = title
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 when (val s = stage) {
                     Stage.Loading -> Spacer(Modifier.height(8.dp))
 
@@ -212,37 +213,27 @@ fun PasswordDialog(
                         )
                     }
                 }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
         }
-    )
+    }
 
     // 忘记密码 → 仅清除隐私空间数据（普通书架保留），随后可重新设置
     if (showForgot) {
-        AlertDialog(
+        MoyueDialog(
             onDismissRequest = { showForgot = false },
-            title = { Text("忘记密码") },
-            text = {
-                Text("将清空隐私空间内的全部书籍、进度与书签（普通书架不受影响），并重置隐私空间密码。此操作不可恢复。")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        runCatching {
-                            Graph.privacyRepository.clearPassword()
-                            Graph.bookRepository.deleteAllInSpace(space = 1, deleteFile = true)
-                        }
-                        showForgot = false
-                        onDismiss()
+            title = "忘记密码",
+            subtitle = "将清空隐私空间内的全部书籍、进度与书签（普通书架不受影响），并重置隐私空间密码。此操作不可恢复。",
+            confirmText = "清除隐私空间",
+            onConfirm = {
+                scope.launch {
+                    runCatching {
+                        Graph.privacyRepository.clearPassword()
+                        Graph.bookRepository.deleteAllInSpace(space = 1, deleteFile = true)
                     }
-                }) { Text("清除隐私空间", color = MaterialTheme.colorScheme.error) }
+                    showForgot = false
+                    onDismiss()
+                }
             },
-            dismissButton = {
-                TextButton(onClick = { showForgot = false }) { Text("取消") }
-            }
+            confirmDestructive = true
         )
     }
 }
