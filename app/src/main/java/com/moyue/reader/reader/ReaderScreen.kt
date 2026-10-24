@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -86,6 +87,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.moyue.reader.R
 import com.moyue.reader.data.repo.ClickZone
 import com.moyue.reader.data.repo.PageAnim
 import com.moyue.reader.data.repo.ReadMode
@@ -388,7 +390,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                     )
 
                     ui.pages.isEmpty() && ui.book == null -> Text(
-                        "书籍不存在或已删除",
+                        stringResource(R.string.txt_book_missing),
                         color = palette.secondary,
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -526,7 +528,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                 ) {
                     Icon(
                         Icons.Filled.PauseCircle,
-                        contentDescription = "停止自动滚动",
+                        contentDescription = stringResource(R.string.cd_stop_autoscroll),
                         tint = palette.menuText,
                         modifier = Modifier
                             .clickable { vm.setAutoScroll(false) }
@@ -535,7 +537,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                     )
                     Icon(
                         Icons.Filled.Remove,
-                        contentDescription = "减速",
+                        contentDescription = stringResource(R.string.cd_slower),
                         tint = palette.secondary,
                         modifier = Modifier
                             .clickable {
@@ -553,7 +555,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                     )
                     Icon(
                         Icons.Filled.Add,
-                        contentDescription = "加速",
+                        contentDescription = stringResource(R.string.cd_faster),
                         tint = palette.secondary,
                         modifier = Modifier
                             .clickable {
@@ -633,7 +635,7 @@ private fun ScrollReaderContent(
             .verticalScroll(scrollState)
     ) {
         if (hasPrev) {
-            ScrollChapterButton("上一章", accentColor) { vm.prevChapter() }
+            ScrollChapterButton(stringResource(R.string.btn_prev_chapter), accentColor) { vm.prevChapter() }
         }
         ui.pages.forEachIndexed { idx, page ->
             StaticPage(
@@ -650,10 +652,10 @@ private fun ScrollReaderContent(
             )
         }
         if (hasNext) {
-            ScrollChapterButton("下一章", accentColor) { vm.nextChapter() }
+            ScrollChapterButton(stringResource(R.string.btn_next_chapter), accentColor) { vm.nextChapter() }
         } else {
             Text(
-                "—— 全书完 ——",
+                stringResource(R.string.txt_the_end),
                 color = accentColor,
                 fontSize = 12.sp,
                 modifier = Modifier

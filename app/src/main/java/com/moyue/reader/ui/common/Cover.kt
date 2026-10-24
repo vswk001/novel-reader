@@ -19,12 +19,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.moyue.reader.R
 
 /**
  * 自动生成封面：竖排书名（像真实书脊）+ 色调渐变，圆角卡片。
@@ -70,7 +72,7 @@ fun BookCover(
             }
         }
         Text(
-            text = "墨阅",
+            text = stringResource(R.string.cover_brand),
             color = Color.White.copy(alpha = 0.6f),
             fontSize = 9.sp,
             modifier = Modifier
@@ -91,7 +93,8 @@ fun BookMeta(title: String, progressPercent: Int, modifier: Modifier = Modifier)
             style = MaterialTheme.typography.bodyMedium
         )
         Text(
-            if (progressPercent > 0) "已读 $progressPercent%" else "未开始",
+            if (progressPercent > 0) stringResource(R.string.progress_read, progressPercent)
+            else stringResource(R.string.progress_unread),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall
         )

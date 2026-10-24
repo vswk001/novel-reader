@@ -12,6 +12,7 @@ import android.text.TextPaint
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.db.BookmarkEntity
 import com.moyue.reader.data.db.ChapterEntity
@@ -33,6 +34,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     private val bookId: Long = savedState.get<String>("bookId")?.toLongOrNull() ?: -1L
     private val repo: BookRepository = Graph.bookRepository
     private val settings: SettingsRepository = Graph.settingsRepository
+    private val ctx get() = getApplication<Application>()
 
     /** 由阅读页测量出的排版参数 */
     data class LayoutSpec(
@@ -253,13 +255,13 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val ch = st.chapters.getOrNull(st.chapterIdx)
         val page = st.pages.getOrNull(st.pageIdx)
         if (ch == null || page == null) {
-            showTransient("页面尚未加载完成，请稍候")
+            showTransient(ctx.getString(R.string.tts_page_not_ready))
             return
         }
         val offset = ch.charStart + page.start
         // 同一页去重：避免误以为没点上而连点产生重复书签
         if (st.bookmarks.any { it.chapterIdx == st.chapterIdx && it.charOffset == offset }) {
-            showTransient("本页已在书签中")
+            showTransient(ctx.getString(R.string.bookmark_dup))
             return
         }
         val from = page.start.coerceIn(0, st.chapterText.length)
@@ -269,7 +271,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             .ifBlank { ch.title }
         viewModelScope.launch {
             repo.addBookmark(bookId, st.chapterIdx, offset, excerpt)
-            showTransient("已添加书签")
+            showTransient(ctx.getString(R.string.bookmark_added))
         }
     }
 
@@ -295,7 +297,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             mainHandler.post { advanceTts() }
         }
         override fun onError(utteranceId: String?) {
-            mainHandler.post { stopTts("朗读出错，已停止") }
+            mainHandler.post { stopTts(ctx.getString(R.string.tts_error)) }
         }
     }
 
@@ -309,7 +311,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             runCatching { tts?.shutdown() }
             tts = null
             ttsReady = false
-            showTransient("正在初始化语音引擎…")
+            showTransient(ctx.getString(R.string.tts_initing))
             val app = getApplication<Application>()
             tts = TextToSpeech(app) { status ->
                 mainHandler.post {
@@ -320,7 +322,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
                         startTts()
                     } else {
                         // 无可用引擎：引导去系统 TTS 设置
-                        showTransient("未找到可用语音引擎，正在打开系统设置…")
+                        showTransient(ctx.getString(R.string.tts_no_engine))
                         openTtsSettings()
                     }
                 }
@@ -359,19 +361,19 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             if (runCatching { app.startActivity(i) }.isSuccess) return
         }
-        showTransient("请到 系统设置 → 语言和输入 → 文字转语音 安装并启用引擎")
+        showTransient(ctx.getString(R.string.tts_settings_hint))
     }
 
     private fun startTts() {
         if (!ttsReady) {
-            showTransient("语音引擎未就绪，正在重试…")
+            showTransient(ctx.getString(R.string.tts_not_ready))
             toggleTts()
             return
         }
         tts?.setSpeechRate(_ui.value.prefs.ttsRate)
         requestAudioFocus()
         _ui.update { it.copy(ttsRunning = true) }
-        showTransient("开始朗读")
+        showTransient(ctx.getString(R.string.tts_started))
         speakCurrentPage()
     }
 
@@ -404,7 +406,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             ttsPending = true
             nextChapter()
         } else {
-            stopTts("全书朗读完毕")
+            stopTts(ctx.getString(R.string.tts_finished))
         }
     }
 

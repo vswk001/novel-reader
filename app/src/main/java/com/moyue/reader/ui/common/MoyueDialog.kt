@@ -22,9 +22,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.moyue.reader.R
 import androidx.compose.ui.window.DialogProperties
 
 /**
@@ -39,7 +41,7 @@ fun MoyueDialog(
     confirmText: String? = null,
     onConfirm: (() -> Unit)? = null,
     confirmDestructive: Boolean = false,
-    dismissText: String = "取消",
+    dismissText: String = stringResource(R.string.btn_cancel),
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     Dialog(

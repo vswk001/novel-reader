@@ -79,13 +79,16 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.repo.SortKind
 import com.moyue.reader.di.Graph
@@ -113,6 +116,7 @@ fun BookshelfScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
     val space = ui.space
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var showSearch by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
@@ -184,21 +188,21 @@ fun BookshelfScreen(
     val barActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                     if (space == 1) {
                         IconButton(onClick = { showPrivateMenu = true }) {
-                            Icon(Icons.Filled.Key, contentDescription = "隐私空间设置")
+                            Icon(Icons.Filled.Key, contentDescription = stringResource(R.string.cd_private_settings))
                         }
                         DropdownMenu(
                             expanded = showPrivateMenu,
                             onDismissRequest = { showPrivateMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("修改密码") },
+                                text = { Text(stringResource(R.string.menu_change_password)) },
                                 onClick = {
                                     showPrivateMenu = false
                                     pwdKind = PasswordDialogKind.CHANGE
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("退出隐私空间") },
+                                text = { Text(stringResource(R.string.cd_exit_private)) },
                                 onClick = {
                                     showPrivateMenu = false
                                     onBack?.invoke()
@@ -207,36 +211,54 @@ fun BookshelfScreen(
                         }
                     }
                     IconButton(onClick = { showSearch = !showSearch; if (!showSearch) vm.setQuery("") }) {
-                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                        Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search))
                     }
                     IconButton(onClick = { showSortMenu = true }) {
-                        Icon(Icons.Filled.Sort, contentDescription = "排序")
+                        Icon(Icons.Filled.Sort, contentDescription = stringResource(R.string.cd_sort))
                     }
                     DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text(if (ui.prefs.sortBy == SortKind.RECENT) "最近阅读 ✓" else "最近阅读") },
+                            text = {
+                                Text(
+                                    if (ui.prefs.sortBy == SortKind.RECENT)
+                                        stringResource(R.string.sort_recent) + " ✓"
+                                    else stringResource(R.string.sort_recent)
+                                )
+                            },
                             onClick = { vm.setSort(SortKind.RECENT); showSortMenu = false }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (ui.prefs.sortBy == SortKind.TITLE) "书名 ✓" else "书名") },
+                            text = {
+                                Text(
+                                    if (ui.prefs.sortBy == SortKind.TITLE)
+                                        stringResource(R.string.sort_title) + " ✓"
+                                    else stringResource(R.string.sort_title)
+                                )
+                            },
                             onClick = { vm.setSort(SortKind.TITLE); showSortMenu = false }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (ui.prefs.sortBy == SortKind.ADDED) "添加时间 ✓" else "添加时间") },
+                            text = {
+                                Text(
+                                    if (ui.prefs.sortBy == SortKind.ADDED)
+                                        stringResource(R.string.sort_added) + " ✓"
+                                    else stringResource(R.string.sort_added)
+                                )
+                            },
                             onClick = { vm.setSort(SortKind.ADDED); showSortMenu = false }
                         )
                     }
                     IconButton(onClick = { vm.toggleGridView() }) {
                         Icon(
                             if (ui.prefs.bookshelfGrid) Icons.Filled.ViewList else Icons.Filled.GridView,
-                            contentDescription = "切换视图"
+                            contentDescription = stringResource(R.string.cd_switch_view)
                         )
                     }
                     IconButton(onClick = { onOpenStats(space) }) {
-                        Icon(Icons.Filled.Insights, contentDescription = "阅读统计")
+                        Icon(Icons.Filled.Insights, contentDescription = stringResource(R.string.cd_stats))
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "设置")
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.cd_settings))
                     }
     }
 
@@ -252,7 +274,7 @@ fun BookshelfScreen(
             if (space == 0) {
                 // 普通书架：大标题栏，滚动收起
                 LargeTopAppBar(
-                    title = { Text("墨阅 · 书架") },
+                    title = { Text(stringResource(R.string.title_bookshelf)) },
                     actions = barActions,
                     scrollBehavior = scrollBehavior
                 )
@@ -261,7 +283,7 @@ fun BookshelfScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            "隐私空间",
+                            stringResource(R.string.title_private_space),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -269,7 +291,7 @@ fun BookshelfScreen(
                     navigationIcon = {
                         if (space == 1 && onBack != null) {
                             IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出隐私空间")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_exit_private))
                             }
                         }
                     },
@@ -288,7 +310,7 @@ fun BookshelfScreen(
             ExtendedFloatingActionButton(
                 onClick = { showImportMenu = true },
                 icon = { Icon(Icons.Filled.UploadFile, contentDescription = null) },
-                text = { Text(if (space == 1) "导入到隐私空间" else "导入图书") }
+                text = { Text(if (space == 1) stringResource(R.string.btn_import_private) else stringResource(R.string.btn_import)) }
             )
         }
     ) { padding ->
@@ -317,7 +339,7 @@ fun BookshelfScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        if (armed) "松开进入隐私空间" else "下拉进入隐私空间",
+                        if (armed) stringResource(R.string.pull_release) else stringResource(R.string.pull_hint),
                         style = MaterialTheme.typography.labelLarge,
                         color = if (armed) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant
@@ -364,7 +386,7 @@ fun BookshelfScreen(
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        "继续阅读",
+                                        stringResource(R.string.continue_reading),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -375,7 +397,10 @@ fun BookshelfScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        "第 ${book.curChapter + 1}/${book.chapterCount} 章 · ${progressText(book)}",
+                                        stringResource(
+                                            R.string.chapter_progress,
+                                            book.curChapter + 1, book.chapterCount, progressText(book)
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -412,7 +437,7 @@ fun BookshelfScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = { vm.clearMessage() }) { Text("关闭") }
+                            TextButton(onClick = { vm.clearMessage() }) { Text(stringResource(R.string.btn_close)) }
                         }
                     }
                 }
@@ -420,7 +445,7 @@ fun BookshelfScreen(
                     OutlinedTextField(
                         value = ui.query,
                         onValueChange = { vm.setQuery(it) },
-                        placeholder = { Text("搜索书名") },
+                        placeholder = { Text(stringResource(R.string.hint_search_books)) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -457,16 +482,14 @@ fun BookshelfScreen(
                             }
                             Spacer(Modifier.height(16.dp))
                             Text(
-                                if (space == 1) "隐私空间是空的" else "书架还空着",
+                                if (space == 1) stringResource(R.string.empty_private_title)
+                                else stringResource(R.string.empty_shelf_title),
                                 style = MaterialTheme.typography.titleLarge
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                if (space == 1) {
-                                    "导入的书籍只存在于隐私空间\n长按书籍可在两个空间之间转移"
-                                } else {
-                                    "导入手机中的 txt 文件开始阅读\n自动识别编码与章节目录"
-                                },
+                                if (space == 1) stringResource(R.string.empty_private_body)
+                                else stringResource(R.string.empty_shelf_body),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -560,7 +583,10 @@ fun BookshelfScreen(
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "${progressText(book)} · ${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)}",
+                                        stringResource(
+                                            R.string.book_list_meta,
+                                            progressText(book), book.chapterCount, fmtSize(book.sizeBytes)
+                                        ),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -598,22 +624,22 @@ fun BookshelfScreen(
     if (showImportMenu) {
         MoyueDialog(
             onDismissRequest = { showImportMenu = false },
-            title = "导入图书",
-            subtitle = "支持 txt / log / md / epub，自动识别编码（GBK/UTF-8/UTF-16）与章节目录。",
-            dismissText = "关闭"
+            title = stringResource(R.string.import_title),
+            subtitle = stringResource(R.string.import_subtitle),
+            dismissText = stringResource(R.string.btn_close)
         ) {
             ActionRow(
                 Icons.Filled.UploadFile,
-                "选择文件",
-                "可多选，从文件管理器挑选"
+                stringResource(R.string.import_pick_files),
+                stringResource(R.string.import_pick_files_sub)
             ) {
                 showImportMenu = false
                 pickFiles.launch(arrayOf("text/*", "application/epub+zip", "application/octet-stream"))
             }
             ActionRow(
                 Icons.Filled.FolderOpen,
-                "扫描整个文件夹",
-                "递归查找文件夹内全部支持格式"
+                stringResource(R.string.import_scan_folder),
+                stringResource(R.string.import_scan_folder_sub)
             ) {
                 showImportMenu = false
                 pickTree.launch(null)
@@ -648,7 +674,11 @@ fun BookshelfScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        "${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)} · 已读 ${fmtDuration(book.readTimeMillis)}",
+                        stringResource(
+                            R.string.action_sheet_meta,
+                            book.chapterCount, fmtSize(book.sizeBytes),
+                            fmtDuration(context, book.readTimeMillis)
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -658,8 +688,8 @@ fun BookshelfScreen(
             if (book.charset != "EPUB") {
                 ActionRow(
                     Icons.Filled.Refresh,
-                    "重新切分章节",
-                    "用最新规则重建目录，保留阅读进度"
+                    stringResource(R.string.action_reparse),
+                    stringResource(R.string.action_reparse_sub)
                 ) {
                     vm.reparseBook(book)
                     actionBook = null
@@ -667,24 +697,26 @@ fun BookshelfScreen(
             }
             ActionRow(
                 if (space == 1) Icons.Filled.SwapVert else Icons.Filled.DriveFileMove,
-                if (space == 1) "移回普通书架" else "移入隐私空间",
-                "书籍文件与进度保持不变"
+                if (space == 1) stringResource(R.string.action_move_to_library)
+                else stringResource(R.string.action_move_to_private),
+                stringResource(R.string.action_move_sub)
             ) {
                 vm.moveBook(book, 1 - space)
                 actionBook = null
             }
             ActionRow(
                 Icons.Filled.PushPin,
-                if (book.pinned) "取消置顶" else "置顶",
-                "置顶书籍始终排在书架最前"
+                if (book.pinned) stringResource(R.string.action_unpin)
+                else stringResource(R.string.action_pin),
+                stringResource(R.string.action_pin_sub)
             ) {
                 vm.togglePin(book)
                 actionBook = null
             }
             ActionRow(
                 Icons.Filled.Delete,
-                "移出书架 / 删除",
-                "可选择保留或删除应用内副本",
+                stringResource(R.string.action_remove),
+                stringResource(R.string.action_remove_sub),
                 tint = MaterialTheme.colorScheme.error
             ) {
                 deleteTarget = book
@@ -698,9 +730,9 @@ fun BookshelfScreen(
     deleteTarget?.let { book ->
         MoyueDialog(
             onDismissRequest = { deleteTarget = null },
-            title = "删除「${book.title}」",
-            subtitle = "移出书架会保留应用内副本，删除文件则同时移除副本。删除后不可恢复。",
-            confirmText = "删除（含文件）",
+            title = stringResource(R.string.delete_title, book.title),
+            subtitle = stringResource(R.string.delete_subtitle),
+            confirmText = stringResource(R.string.delete_confirm),
             onConfirm = {
                 vm.deleteBook(book, deleteFile = true)
                 deleteTarget = null
@@ -709,8 +741,8 @@ fun BookshelfScreen(
         ) {
             ActionRow(
                 Icons.Filled.DriveFileMove,
-                "仅移出书架",
-                "保留应用内副本，可重新导入恢复"
+                stringResource(R.string.delete_keep),
+                stringResource(R.string.delete_keep_sub)
             ) {
                 vm.deleteBook(book, deleteFile = false)
                 deleteTarget = null
@@ -727,7 +759,9 @@ private fun progressPercent(book: BookEntity): Int =
         0
     }
 
+@Composable
 private fun progressText(book: BookEntity): String {
     val p = progressPercent(book)
-    return if (p > 0) "已读 $p%" else "未开始"
+    return if (p > 0) stringResource(R.string.progress_read, p)
+    else stringResource(R.string.progress_unread)
 }

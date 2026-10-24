@@ -15,7 +15,7 @@ object Graph {
 
     val database: AppDatabase by lazy { AppDatabase.build(appContext) }
     val bookRepository: BookRepository by lazy {
-        BookRepository(database, java.io.File(appContext.filesDir, "books"))
+        BookRepository(appContext, database, java.io.File(appContext.filesDir, "books"))
     }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(appContext) }
     val bookImporter: BookImporter by lazy { BookImporter(appContext, bookRepository) }

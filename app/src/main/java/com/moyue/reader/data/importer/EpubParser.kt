@@ -1,5 +1,7 @@
 package com.moyue.reader.data.importer
 
+import androidx.annotation.StringRes
+import com.moyue.reader.R
 import java.io.ByteArrayInputStream
 import java.util.zip.ZipInputStream
 
@@ -7,6 +9,9 @@ import java.util.zip.ZipInputStream
  * 基础 EPUB 解析器：ZIP → container.xml → OPF(manifest/spine) → NCX/nav 目录 → XHTML 正文提取。
  * 转成「章节标题 + 纯文本」后走与 TXT 相同的入库管线（不依赖 XML 库，OPF/NCX 均为结构规整的生成文件）。
  */
+/** 携带字符串资源 ID 的解析失败：由调用方用 Context 解析为用户语言 */
+class EpubParseException(@StringRes val resId: Int, val detail: String? = null) : RuntimeException()
+
 object EpubParser {
 
     data class EpubChapter(val title: String, val text: String)
@@ -23,12 +28,12 @@ object EpubParser {
     fun parse(bytes: ByteArray): EpubBook {
         val entries = readZip(bytes)
         val container = entries["meta-inf/container.xml"]
-            ?: error("不是有效的 EPUB 文件（缺少 container.xml）")
+            ?: throw EpubParseException(R.string.err_epub_container)
         val opfPath = Regex("full-path=\"([^\"]+)\"")
             .find(container.decodeToString())?.groupValues?.get(1)
-            ?: error("EPUB container.xml 解析失败")
+            ?: throw EpubParseException(R.string.err_epub_container_parse)
         val opfBytes = entries[opfPath.lowercase()]
-            ?: error("EPUB 缺少 OPF 文件：$opfPath")
+            ?: throw EpubParseException(R.string.err_epub_opf, opfPath)
         val opf = opfBytes.decodeToString()
         val opfDir = opfPath.substringBeforeLast('/', "").let { if (it.isEmpty()) "" else "$it/" }
 
@@ -101,7 +106,7 @@ object EpubParser {
                 text = text
             )
         }
-        if (chapters.isEmpty()) error("EPUB 中没有可读取的正文内容")
+        if (chapters.isEmpty()) throw EpubParseException(R.string.err_epub_no_content)
 
         // 单文件整本（部分制作粗糙的 EPUB）：按 TXT 章节规则二次切分
         if (chapters.size == 1 && chapters[0].text.length > 100_000) {

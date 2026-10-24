@@ -20,9 +20,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.moyue.reader.R
 import com.moyue.reader.di.Graph
 import com.moyue.reader.ui.common.MoyueDialog
 import kotlinx.coroutines.launch
@@ -61,6 +63,11 @@ fun PasswordDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var showForgot by remember { mutableStateOf(false) }
 
+    // 非可组合回调（提交/图案绘制）中使用的本地化文本，需先在此解析
+    val strMismatch = stringResource(R.string.pwd_mismatch)
+    val strWrong = stringResource(R.string.pwd_wrong)
+    val strPatternSimple = stringResource(R.string.pwd_pattern_simple, MIN_PATTERN_POINTS)
+
     // 读取已存密码类型，决定起始阶段
     LaunchedEffect(kind) {
         val type = repo.passwordType()
@@ -88,7 +95,7 @@ fun PasswordDialog(
                     }
                 } else {
                     pin = ""
-                    error = "两次输入不一致，请重新设置"
+                    error = strMismatch
                     stage = Stage.InputFirst(st.type)
                 }
             }
@@ -103,7 +110,7 @@ fun PasswordDialog(
                         }
                     } else {
                         pin = ""
-                        error = "密码错误，请重试"
+                        error = strWrong
                     }
                 }
             }
@@ -119,11 +126,13 @@ fun PasswordDialog(
     }
 
     val title = when (stage) {
-        Stage.Loading -> "隐私空间"
-        Stage.ChooseType -> "设置隐私空间密码"
-        is Stage.InputFirst -> "输入新密码"
-        is Stage.InputConfirm -> "再次输入以确认"
-        is Stage.VerifyOld -> if (kind == PasswordDialogKind.CHANGE) "验证当前密码" else "输入隐私空间密码"
+        Stage.Loading -> stringResource(R.string.title_private_space)
+        Stage.ChooseType -> stringResource(R.string.pwd_setup_title)
+        is Stage.InputFirst -> stringResource(R.string.pwd_new_title)
+        is Stage.InputConfirm -> stringResource(R.string.pwd_confirm_title)
+        is Stage.VerifyOld ->
+            if (kind == PasswordDialogKind.CHANGE) stringResource(R.string.pwd_verify_change_title)
+            else stringResource(R.string.pwd_verify_title)
     }
 
     MoyueDialog(
@@ -136,7 +145,7 @@ fun PasswordDialog(
 
                     Stage.ChooseType -> {
                         Text(
-                            "选择密码方式；忘记密码可通过「忘记密码？」清除隐私空间数据后重设",
+                            stringResource(R.string.pwd_choose_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -146,13 +155,13 @@ fun PasswordDialog(
                             FilterChip(
                                 selected = false,
                                 onClick = { stage = Stage.InputFirst(PrivacyRepository.TYPE_PIN) },
-                                label = { Text("数字密码") },
+                                label = { Text(stringResource(R.string.pwd_type_pin)) },
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             FilterChip(
                                 selected = false,
                                 onClick = { stage = Stage.InputFirst(PrivacyRepository.TYPE_PATTERN) },
-                                label = { Text("图案密码") }
+                                label = { Text(stringResource(R.string.pwd_type_pattern)) }
                             )
                         }
                     }
@@ -168,7 +177,7 @@ fun PasswordDialog(
                         }
                         if (inputType == PrivacyRepository.TYPE_PIN) {
                             Text(
-                                "输入 $MIN_PIN-$MAX_PIN 位数字",
+                                stringResource(R.string.pwd_pin_hint, MIN_PIN, MAX_PIN),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -181,7 +190,7 @@ fun PasswordDialog(
                             )
                         } else {
                             Text(
-                                "至少连接 $MIN_PATTERN_POINTS 个点",
+                                stringResource(R.string.pwd_pattern_hint, MIN_PATTERN_POINTS),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -190,9 +199,9 @@ fun PasswordDialog(
                                 val points = pattern.split("-").size
                                 if (points < MIN_PATTERN_POINTS) {
                                     if (stage is Stage.InputFirst || stage is Stage.InputConfirm) {
-                                        error = "图案太简单，至少连接 $MIN_PATTERN_POINTS 个点"
+                                        error = strPatternSimple
                                     } else {
-                                        error = "密码错误，请重试"
+                                        error = strWrong
                                     }
                                 } else {
                                     submitSecret(pattern, PrivacyRepository.TYPE_PATTERN)
@@ -207,7 +216,7 @@ fun PasswordDialog(
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Text(
-                            "忘记密码？",
+                            stringResource(R.string.pwd_forgot),
                             color = MaterialTheme.colorScheme.error,
                             fontSize = 12.sp
                         )
@@ -220,9 +229,9 @@ fun PasswordDialog(
     if (showForgot) {
         MoyueDialog(
             onDismissRequest = { showForgot = false },
-            title = "忘记密码",
-            subtitle = "将清空隐私空间内的全部书籍、进度与书签（普通书架不受影响），并重置隐私空间密码。此操作不可恢复。",
-            confirmText = "清除隐私空间",
+            title = stringResource(R.string.pwd_forgot_title),
+            subtitle = stringResource(R.string.pwd_forgot_body),
+            confirmText = stringResource(R.string.pwd_forgot_confirm),
             onConfirm = {
                 scope.launch {
                     runCatching {

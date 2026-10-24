@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.data.repo.SortKind
@@ -52,6 +53,7 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
     private val repo = Graph.bookRepository
     private val settings = Graph.settingsRepository
     private val importer = Graph.bookImporter
+    private val ctx get() = getApplication<Application>()
 
     private val query = MutableStateFlow("")
     private val busy = MutableStateFlow(false)
@@ -83,10 +85,14 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
             val ok = results.count { it.ok }
             val failed = results.filter { !it.ok }
             val msg = buildString {
-                append("导入完成：成功 $ok 本")
+                append(ctx.getString(R.string.msg_import_done, ok))
                 if (failed.isNotEmpty()) {
-                    append("，失败 ${failed.size} 本：")
-                    append(failed.joinToString("；") { "${it.fileName}（${it.message}）" })
+                    append(ctx.getString(R.string.msg_import_failed_part, failed.size))
+                    append(
+                        failed.joinToString(ctx.getString(R.string.sep_item)) {
+                            "${it.fileName}（${it.message}）"
+                        }
+                    )
                 }
             }
             busy.value = false
@@ -97,20 +103,20 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
     fun scanFolder(treeUri: Uri) {
         viewModelScope.launch {
             busy.value = true
-            _ui.update { it.copy(message = "正在扫描文件夹…") }
+            _ui.update { it.copy(message = ctx.getString(R.string.msg_scanning)) }
             val uris = importer.scanTree(treeUri)
             if (uris.isEmpty()) {
                 busy.value = false
-                _ui.update { it.copy(message = "该文件夹中没有找到支持的文件（txt/log/md）") }
+                _ui.update { it.copy(message = ctx.getString(R.string.msg_scan_empty)) }
             } else {
-                _ui.update { it.copy(message = "扫描到 ${uris.size} 个文件，开始导入…") }
+                _ui.update { it.copy(message = ctx.getString(R.string.msg_scan_found, uris.size)) }
                 val results = importer.importUris(uris, space)
                 val ok = results.count { it.ok }
                 busy.value = false
                 _ui.update {
                     it.copy(
-                        message = "扫描导入完成：成功 $ok / ${uris.size} 个文件" +
-                            if (results.any { !it.ok }) "（重复或失败的已跳过）" else ""
+                        message = ctx.getString(R.string.msg_scan_done, ok, uris.size) +
+                            if (results.any { !it.ok }) ctx.getString(R.string.msg_scan_skipped) else ""
                     )
                 }
             }
@@ -126,8 +132,8 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
             repo.deleteBook(book, deleteFile)
             _ui.update {
                 it.copy(
-                    message = if (deleteFile) "已删除「${book.title}」"
-                    else "已移出书架（文件保留）"
+                    message = if (deleteFile) ctx.getString(R.string.msg_deleted, book.title)
+                    else ctx.getString(R.string.msg_removed)
                 )
             }
         }
@@ -139,8 +145,8 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
             repo.setSpace(book.id, toSpace)
             _ui.update {
                 it.copy(
-                    message = if (toSpace == 1) "已移入隐私空间「${book.title}」"
-                    else "已移回普通书架「${book.title}」"
+                    message = if (toSpace == 1) ctx.getString(R.string.msg_moved_private, book.title)
+                    else ctx.getString(R.string.msg_moved_library, book.title)
                 )
             }
         }
@@ -149,10 +155,16 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
     /** 用最新章节规则重新切分（进度保留） */
     fun reparseBook(book: BookEntity) {
         viewModelScope.launch {
-            _ui.update { it.copy(message = "正在重新分析「${book.title}」的章节…") }
+            _ui.update { it.copy(message = ctx.getString(R.string.msg_reparse_running, book.title)) }
             runCatching { repo.reparseChapters(book.id) }
-                .onSuccess { n -> _ui.update { it.copy(message = "重切完成：「${book.title}」共 $n 章（阅读进度已保留）") } }
-                .onFailure { e -> _ui.update { it.copy(message = "重切失败：${e.message}") } }
+                .onSuccess { n ->
+                    _ui.update {
+                        it.copy(message = ctx.getString(R.string.msg_reparse_done, book.title, n))
+                    }
+                }
+                .onFailure { e ->
+                    _ui.update { it.copy(message = ctx.getString(R.string.msg_reparse_failed, e.message ?: "")) }
+                }
         }
     }
 

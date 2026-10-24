@@ -22,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.moyue.reader.R
 
 /** 数字密码键盘（4-8 位，手动确认） */
 @Composable
@@ -75,7 +77,7 @@ fun PinPad(
                                 .clickable { onBackspace() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = "删除")
+                            Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = stringResource(R.string.cd_backspace))
                         }
                         else -> Box(
                             Modifier
@@ -96,7 +98,7 @@ fun PinPad(
             onClick = onConfirm,
             enabled = entered.length in 4..8
         ) {
-            Text("确定")
+            Text(stringResource(R.string.btn_confirm))
         }
     }
 }

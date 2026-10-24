@@ -1,5 +1,7 @@
 package com.moyue.reader.data.repo
 
+import android.content.Context
+import com.moyue.reader.R
 import com.moyue.reader.data.db.AppDatabase
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.db.BookmarkEntity
@@ -16,6 +18,7 @@ import java.util.Date
 import java.util.Locale
 
 class BookRepository(
+    private val context: Context,
     db: AppDatabase,
     private val booksDir: File
 ) {
@@ -59,10 +62,10 @@ class BookRepository(
      * @return 新章节数
      */
     suspend fun reparseChapters(bookId: Long): Int = withContext(Dispatchers.IO) {
-        val book = bookDao.get(bookId) ?: error("书籍不存在")
-        if (book.charset == "EPUB") error("EPUB 书籍使用自带目录，无需重新切分")
+        val book = bookDao.get(bookId) ?: error(context.getString(R.string.err_book_missing))
+        if (book.charset == "EPUB") error(context.getString(R.string.err_epub_no_reparse))
         val file = bookFile(bookId)
-        if (!file.exists()) error("应用内副本丢失，请删除后重新导入")
+        if (!file.exists()) error(context.getString(R.string.err_copy_missing))
         val text = file.readText(Charsets.UTF_8)
         val chapters = withContext(Dispatchers.Default) { ChapterParser.parse(text) }
         chapterDao.deleteForBook(bookId)

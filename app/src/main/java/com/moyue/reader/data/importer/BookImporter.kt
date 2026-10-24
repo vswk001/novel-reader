@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
+import com.moyue.reader.R
 import com.moyue.reader.data.repo.BookRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,19 +26,19 @@ class BookImporter(
         uris.map { importUri(it, space) }
 
     suspend fun importUri(uri: Uri, space: Int = 0): ImportResult = withContext(Dispatchers.IO) {
-        val name = queryName(uri) ?: "未知文件.txt"
+        val name = queryName(uri) ?: context.getString(R.string.importer_unknown_name)
         try {
             if (querySize(uri) > MAX_FILE_BYTES) {
-                return@withContext ImportResult(name, false, "文件过大（上限 256MB）")
+                return@withContext ImportResult(name, false, context.getString(R.string.err_too_big))
             }
             val title = name.substringBeforeLast('.')
             val size = querySize(uri)
             if (repo.isDuplicate(title, size, space)) {
-                return@withContext ImportResult(name, false, "已在书架中")
+                return@withContext ImportResult(name, false, context.getString(R.string.err_duplicate))
             }
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: return@withContext ImportResult(name, false, "无法读取文件")
-            if (bytes.isEmpty()) return@withContext ImportResult(name, false, "文件为空")
+                ?: return@withContext ImportResult(name, false, context.getString(R.string.err_unreadable))
+            if (bytes.isEmpty()) return@withContext ImportResult(name, false, context.getString(R.string.err_empty_file))
 
             var bookTitle = title
             val charsetName: String
@@ -83,9 +84,17 @@ class BookImporter(
                 runCatching { repo.deleteBookById(bookId, deleteFile = true) }
                 throw e
             }
-            ImportResult(name, true, "已导入（$charsetName，${chapters.size} 章）")
+            ImportResult(
+                name, true,
+                context.getString(R.string.msg_imported, charsetName, chapters.size)
+            )
+        } catch (e: EpubParseException) {
+            val msg = if (e.detail != null) context.getString(e.resId, e.detail)
+            else context.getString(e.resId)
+            ImportResult(name, false, msg)
         } catch (e: Exception) {
-            ImportResult(name, false, "导入失败：${e.message ?: "未知错误"}")
+            val reason = e.message ?: context.getString(R.string.err_unknown)
+            ImportResult(name, false, context.getString(R.string.err_import_failed, reason))
         }
     }
 

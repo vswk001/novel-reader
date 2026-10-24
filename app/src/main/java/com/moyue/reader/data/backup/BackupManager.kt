@@ -2,6 +2,7 @@ package com.moyue.reader.data.backup
 
 import android.content.Context
 import android.net.Uri
+import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.db.BookmarkEntity
 import com.moyue.reader.data.repo.BookRepository
@@ -77,7 +78,7 @@ class BackupManager(
             )
             context.contentResolver.openOutputStream(uri)?.use { os ->
                 os.write(json.encodeToString(BackupData.serializer(), payload).toByteArray(Charsets.UTF_8))
-            } ?: error("无法写入备份文件")
+            } ?: error(context.getString(R.string.err_write_backup))
             books.size
         }
     }
@@ -86,7 +87,7 @@ class BackupManager(
     suspend fun importFrom(uri: Uri): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
         runCatching {
             val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
-                ?: error("无法读取备份文件")
+                ?: error(context.getString(R.string.err_read_backup))
             val data = json.decodeFromString(BackupData.serializer(), text)
             runCatching { settings.update { data.prefs } }
             val local = repo.booksAll()

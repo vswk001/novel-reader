@@ -45,9 +45,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.moyue.reader.R
 import com.moyue.reader.data.backup.BackupManager
 import com.moyue.reader.data.repo.ClickZone
 import com.moyue.reader.data.repo.PageAnim
@@ -64,6 +67,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val prefs by Graph.settingsRepository.prefs
         .collectAsStateWithLifecycle(initialValue = ReaderPrefs())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var message by remember { mutableStateOf<String?>(null) }
 
     fun update(transform: (ReaderPrefs) -> ReaderPrefs) {
@@ -76,8 +80,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
             Graph.backupManager.exportTo(uri)
-                .onSuccess { message = "备份成功：导出 $it 本书的数据" }
-                .onFailure { message = "备份失败：${it.message}" }
+                .onSuccess { message = context.getString(R.string.msg_backup_ok, it) }
+                .onFailure { message = context.getString(R.string.msg_backup_fail, it.message ?: "") }
         }
     }
     val importLauncher = rememberLauncherForActivityResult(
@@ -87,19 +91,19 @@ fun SettingsScreen(onBack: () -> Unit) {
         scope.launch {
             Graph.backupManager.importFrom(uri)
                 .onSuccess { (matched, merged) ->
-                    message = "恢复完成：匹配到 $matched 本书（书籍文件需已在本机），合并进度 $merged 本"
+                    message = context.getString(R.string.msg_restore_ok, matched, merged)
                 }
-                .onFailure { message = "恢复失败：${it.message}" }
+                .onFailure { message = context.getString(R.string.msg_restore_fail, it.message ?: "") }
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 }
             )
@@ -125,19 +129,24 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             // ---------- 阅读方式 ----------
-            SectionCard("阅读方式") {
-                ChipRow("阅读模式") {
+            SectionCard(stringResource(R.string.sec_reading)) {
+                ChipRow(stringResource(R.string.label_read_mode)) {
                     ReadMode.entries.forEach { m ->
                         FilterChip(
                             selected = prefs.readMode == m,
                             onClick = { update { it.copy(readMode = m) } },
-                            label = { Text(if (m == ReadMode.PAGE) "左右翻页" else "上下滚动") },
+                            label = {
+                                Text(
+                                    if (m == ReadMode.PAGE) stringResource(R.string.mode_page)
+                                    else stringResource(R.string.mode_scroll)
+                                )
+                            },
                             modifier = Modifier.padding(end = 8.dp)
                         )
                     }
                 }
                 if (prefs.readMode == ReadMode.PAGE) {
-                    ChipRow("翻页动画") {
+                    ChipRow(stringResource(R.string.label_page_anim)) {
                         PageAnim.entries.forEach { anim ->
                             FilterChip(
                                 selected = prefs.pageAnim == anim,
@@ -145,11 +154,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 label = {
                                     Text(
                                         when (anim) {
-                                            PageAnim.SLIDE -> "滑动"
-                                            PageAnim.COVER -> "覆盖"
-                                            PageAnim.FADE -> "淡入"
-                                            PageAnim.NONE -> "无"
-                                            PageAnim.CURL -> "仿真"
+                                            PageAnim.SLIDE -> stringResource(R.string.anim_slide)
+                                            PageAnim.COVER -> stringResource(R.string.anim_cover)
+                                            PageAnim.FADE -> stringResource(R.string.anim_fade)
+                                            PageAnim.NONE -> stringResource(R.string.anim_none)
+                                            PageAnim.CURL -> stringResource(R.string.anim_curl)
                                         }
                                     )
                                 },
@@ -158,11 +167,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                         }
                     }
                 }
-                ChipRow("点击翻页区域") {
+                ChipRow(stringResource(R.string.label_tap_zone)) {
                     listOf(
-                        ClickZone.LEFT_RIGHT to "左右两侧",
-                        ClickZone.TOP_BOTTOM to "上下两段",
-                        ClickZone.OFF to "关闭"
+                        ClickZone.LEFT_RIGHT to stringResource(R.string.zone_left_right),
+                        ClickZone.TOP_BOTTOM to stringResource(R.string.zone_top_bottom),
+                        ClickZone.OFF to stringResource(R.string.zone_off)
                     ).forEach { (zone, label) ->
                         FilterChip(
                             selected = prefs.tapZone == zone,
@@ -172,19 +181,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                         )
                     }
                 }
-                PrefSwitch("音量键翻页", "音量+上一页，音量-下一页", prefs.volumeKeyTurn) {
+                PrefSwitch(
+                    stringResource(R.string.sw_volume_key),
+                    stringResource(R.string.sw_volume_key_sub),
+                    prefs.volumeKeyTurn
+                ) {
                     v -> update { it.copy(volumeKeyTurn = v) }
                 }
                 PrefSlider(
-                    label = "朗读语速",
-                    valueLabel = String.format("%.1f 倍", prefs.ttsRate),
+                    label = stringResource(R.string.label_tts_rate),
+                    valueLabel = stringResource(R.string.fmt_x_times, prefs.ttsRate),
                     value = prefs.ttsRate,
                     valueRange = 0.5f..2.0f,
                     steps = 14,
                     onChange = { v -> update { it.copy(ttsRate = (v * 10).toInt() / 10f) } }
                 )
                 PrefSlider(
-                    label = "自动滚动速度",
+                    label = stringResource(R.string.label_autoscroll_speed),
                     valueLabel = "${prefs.autoScrollSpeed} dp/s",
                     value = prefs.autoScrollSpeed.toFloat(),
                     valueRange = 40f..400f,
@@ -194,9 +207,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             // ---------- 排版 ----------
-            SectionCard("阅读排版") {
+            SectionCard(stringResource(R.string.sec_layout)) {
                 PrefSlider(
-                    label = "字号",
+                    label = stringResource(R.string.label_font_size),
                     valueLabel = "${prefs.fontSp} sp",
                     value = prefs.fontSp.toFloat(),
                     valueRange = 10f..40f,
@@ -204,15 +217,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                     onChange = { v -> update { it.copy(fontSp = v.toInt()) } }
                 )
                 PrefSlider(
-                    label = "行距",
-                    valueLabel = String.format("%.1f 倍", prefs.lineSpacing),
+                    label = stringResource(R.string.label_line_spacing),
+                    valueLabel = stringResource(R.string.fmt_x_times, prefs.lineSpacing),
                     value = prefs.lineSpacing,
                     valueRange = 1.0f..2.4f,
                     steps = 13,
                     onChange = { v -> update { it.copy(lineSpacing = (v * 10).toInt() / 10f) } }
                 )
                 PrefSlider(
-                    label = "水平边距",
+                    label = stringResource(R.string.label_padding_h),
                     valueLabel = "${prefs.paddingH} dp",
                     value = prefs.paddingH.toFloat(),
                     valueRange = 8f..48f,
@@ -220,7 +233,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     onChange = { v -> update { it.copy(paddingH = v.toInt()) } }
                 )
                 PrefSlider(
-                    label = "上下边距",
+                    label = stringResource(R.string.label_padding_v),
                     valueLabel = "${prefs.paddingV} dp",
                     value = prefs.paddingV.toFloat(),
                     valueRange = 4f..64f,
@@ -230,10 +243,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             // ---------- 主题与字体 ----------
-            SectionCard("主题与字体") {
+            SectionCard(stringResource(R.string.sec_theme)) {
                 PrefSwitch(
-                    label = "跟随系统深色模式",
-                    subtitle = "夜间自动切换黑底主题",
+                    label = stringResource(R.string.sw_follow_dark),
+                    subtitle = stringResource(R.string.sw_follow_dark_sub),
                     checked = prefs.themeFollowSystem,
                     onChange = { v -> update { it.copy(themeFollowSystem = v) } }
                 )
@@ -264,29 +277,38 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Spacer(Modifier.weight(1f))
                     FilterChip(
                         selected = prefs.serif,
-                        onClick = { update { it.copy(serif = !it.serif) } },
-                        label = { Text(if (prefs.serif) "宋体" else "黑体") }
+                        onClick = { update { it.copy(serif = !prefs.serif) } },
+                        label = {
+                            Text(
+                                if (prefs.serif) stringResource(R.string.font_style_serif)
+                                else stringResource(R.string.font_style_sans)
+                            )
+                        }
                     )
                 }
             }
 
             // ---------- 阅读体验 ----------
-            SectionCard("阅读体验") {
-                PrefSwitch("屏幕常亮", "阅读时保持屏幕不休眠", prefs.keepScreenOn) {
+            SectionCard(stringResource(R.string.sec_experience)) {
+                PrefSwitch(
+                    stringResource(R.string.sw_keep_on),
+                    stringResource(R.string.sw_keep_on_sub),
+                    prefs.keepScreenOn
+                ) {
                     v -> update { it.copy(keepScreenOn = v) }
                 }
                 PrefSwitch(
-                    label = "禁止截屏",
-                    subtitle = "开启后截屏/录屏黑屏，最近任务无预览（FLAG_SECURE）",
+                    label = stringResource(R.string.sw_secure),
+                    subtitle = stringResource(R.string.sw_secure_sub),
                     checked = prefs.secureMode,
                     onChange = { v -> update { it.copy(secureMode = v) } }
                 )
             }
 
             // ---------- 隐私空间说明 ----------
-            SectionCard("隐私空间") {
+            SectionCard(stringResource(R.string.sec_private)) {
                 Text(
-                    "在书架页面下拉过半屏松开即可进入隐私空间；\n首次进入需设置数字或图案密码，两个空间的书籍完全独立。\n忘记密码可通过「设置 → 应用 → 清除数据」重置（会清空书架）。",
+                    stringResource(R.string.private_help),
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -294,30 +316,30 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             // ---------- 备份与恢复 ----------
-            SectionCard("备份与恢复") {
+            SectionCard(stringResource(R.string.sec_backup)) {
                 Text(
-                    "备份包含：书架（含隐私空间）、阅读进度、书签、设置（不含书籍文件本身）。恢复时按「书名+文件大小」匹配本机书籍。",
+                    stringResource(R.string.backup_help),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(10.dp))
                 Row {
                     Button(onClick = { exportLauncher.launch(BackupManager.suggestFileName()) }) {
-                        Text("导出备份")
+                        Text(stringResource(R.string.btn_export))
                     }
                     Spacer(Modifier.width(12.dp))
                     OutlinedButton(onClick = {
                         importLauncher.launch(arrayOf("application/json"))
                     }) {
-                        Text("导入备份")
+                        Text(stringResource(R.string.btn_import_backup))
                     }
                 }
             }
 
             // ---------- 关于 ----------
-            SectionCard("关于") {
+            SectionCard(stringResource(R.string.sec_about)) {
                 Text(
-                    "墨阅 v1.6.5 · 纯本地小说阅读器\n无网络权限、无广告、无遥测",
+                    stringResource(R.string.about_text),
                     fontSize = 13.sp,
                     lineHeight = 20.sp
                 )

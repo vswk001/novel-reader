@@ -1,18 +1,20 @@
 package com.moyue.reader.ui.common
 
+import android.content.Context
+import com.moyue.reader.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-fun fmtDuration(millis: Long): String {
-    if (millis <= 0) return "0 分钟"
+fun fmtDuration(context: Context, millis: Long): String {
+    if (millis <= 0) return context.getString(R.string.dur_zero)
     val minutes = millis / 60_000
     val h = minutes / 60
     val m = minutes % 60
     return when {
-        h <= 0 -> "$m 分钟"
-        m == 0L -> "$h 小时"
-        else -> "$h 小时 $m 分钟"
+        h <= 0 -> context.getString(R.string.dur_minutes, m)
+        m == 0L -> context.getString(R.string.dur_hours, h)
+        else -> context.getString(R.string.dur_hours_minutes, h, m)
     }
 }
 

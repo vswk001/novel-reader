@@ -28,8 +28,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.di.Graph
 import com.moyue.reader.ui.common.BookCover
@@ -45,6 +48,7 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
         val books: List<BookEntity> = emptyList()
     )
 
+    val context = LocalContext.current
     val stats by produceState(initialValue = StatsData(), space) {
         val repo = Graph.bookRepository
         value = StatsData(
@@ -57,10 +61,15 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (space == 1) "隐私空间 · 阅读统计" else "阅读统计") },
+                title = {
+                    Text(
+                        if (space == 1) stringResource(R.string.stats_title_private)
+                        else stringResource(R.string.stats_title)
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 }
             )
@@ -80,18 +89,18 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
             ) {
                 Card(Modifier.weight(1f)) {
                     Column(Modifier.padding(14.dp)) {
-                        Text("今日阅读", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.stats_today), style = MaterialTheme.typography.labelMedium)
                         Text(
-                            fmtDuration(stats.todayMillis),
+                            fmtDuration(context, stats.todayMillis),
                             style = MaterialTheme.typography.headlineSmall
                         )
                     }
                 }
                 Card(Modifier.weight(1f)) {
                     Column(Modifier.padding(14.dp)) {
-                        Text("累计阅读", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.stats_total), style = MaterialTheme.typography.labelMedium)
                         Text(
-                            fmtDuration(stats.totalMillis),
+                            fmtDuration(context, stats.totalMillis),
                             style = MaterialTheme.typography.headlineSmall
                         )
                     }
@@ -99,7 +108,7 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
             }
 
             Text(
-                "阅读时长排行（前 20）",
+                stringResource(R.string.stats_rank),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(vertical = 8.dp)
@@ -107,7 +116,7 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
 
             if (stats.books.isEmpty()) {
                 Text(
-                    "还没有阅读记录，先去读一会儿书吧",
+                    stringResource(R.string.stats_empty),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 16.dp)
@@ -142,13 +151,14 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text(book.title, maxLines = 1)
                                 Text(
-                                    "${book.chapterCount} 章 · ${fmtSize(book.sizeBytes)}",
+                                    stringResource(R.string.chapters_count, book.chapterCount) +
+                                        " · " + fmtSize(book.sizeBytes),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Text(
-                                fmtDuration(book.readTimeMillis),
+                                fmtDuration(context, book.readTimeMillis),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -1,5 +1,6 @@
 package com.moyue.reader
 
+import com.moyue.reader.data.importer.EpubParseException
 import com.moyue.reader.data.importer.EpubParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -108,8 +109,8 @@ class EpubParserTest {
         try {
             EpubParser.parse(bad)
             fail("should throw")
-        } catch (e: Exception) {
-            assertTrue(e.message!!.contains("container.xml"))
+        } catch (e: EpubParseException) {
+            assertEquals(R.string.err_epub_container, e.resId)
         }
     }
 

@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +65,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.windowInsetsPadding
+import com.moyue.reader.R
 import com.moyue.reader.data.repo.ReadMode
 import com.moyue.reader.data.repo.ReaderThemeKind
 
@@ -101,7 +103,7 @@ fun ReaderMenuOverlay(
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = stringResource(R.string.cd_back),
                         tint = palette.menuText
                     )
                 }
@@ -115,14 +117,14 @@ fun ReaderMenuOverlay(
                 IconButton(onClick = { vm.addBookmarkAtCurrentPage() }) {
                     Icon(
                         Icons.Filled.StarBorder,
-                        contentDescription = "加书签",
+                        contentDescription = stringResource(R.string.cd_add_bookmark),
                         tint = palette.menuText
                     )
                 }
                 IconButton(onClick = { sheet = ReaderSheet.SEARCH }) {
                     Icon(
                         Icons.Filled.Search,
-                        contentDescription = "书内搜索",
+                        contentDescription = stringResource(R.string.cd_search_in_book),
                         tint = palette.menuText
                     )
                 }
@@ -154,7 +156,8 @@ fun ReaderMenuOverlay(
                         palette = palette,
                         value = ui.prefs.brightness,
                         enabled = !ui.prefs.brightnessFollowSystem,
-                        label = if (ui.prefs.brightnessFollowSystem) "跟随系统" else "手动",
+                        label = if (ui.prefs.brightnessFollowSystem) stringResource(R.string.brightness_auto)
+                        else stringResource(R.string.brightness_manual),
                         onLabelClick = {
                             vm.updatePrefs {
                                 it.copy(brightnessFollowSystem = !it.brightnessFollowSystem)
@@ -211,7 +214,8 @@ fun ReaderMenuOverlay(
                         }
                         Spacer(Modifier.width(8.dp))
                         MenuRoundButton(
-                            if (ui.prefs.serif) "宋" else "黑",
+                            if (ui.prefs.serif) stringResource(R.string.font_btn_serif)
+                            else stringResource(R.string.font_btn_sans),
                             palette,
                             highlight = true
                         ) {
@@ -257,16 +261,16 @@ fun ReaderMenuOverlay(
                             .padding(top = 8.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        MenuIconButton("目录", Icons.AutoMirrored.Filled.MenuBook, palette) {
+                        MenuIconButton(stringResource(R.string.btn_toc), Icons.AutoMirrored.Filled.MenuBook, palette) {
                             sheet = ReaderSheet.TOC
                         }
-                        MenuIconButton("书签", Icons.Filled.Star, palette) {
+                        MenuIconButton(stringResource(R.string.btn_bookmarks), Icons.Filled.Star, palette) {
                             sheet = ReaderSheet.BOOKMARK
                         }
-                        MenuIconButton("上一章", Icons.Filled.KeyboardArrowUp, palette) {
+                        MenuIconButton(stringResource(R.string.btn_prev_chapter), Icons.Filled.KeyboardArrowUp, palette) {
                             vm.prevChapter()
                         }
-                        MenuIconButton("下一章", Icons.Filled.KeyboardArrowDown, palette) {
+                        MenuIconButton(stringResource(R.string.btn_next_chapter), Icons.Filled.KeyboardArrowDown, palette) {
                             vm.nextChapter()
                         }
                     }
@@ -277,7 +281,8 @@ fun ReaderMenuOverlay(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         MenuIconButton(
-                            if (ui.prefs.readMode == ReadMode.PAGE) "切滚动" else "切翻页",
+                            if (ui.prefs.readMode == ReadMode.PAGE) stringResource(R.string.btn_switch_scroll)
+                            else stringResource(R.string.btn_switch_page),
                             Icons.Filled.SwapVert,
                             palette
                         ) {
@@ -289,7 +294,8 @@ fun ReaderMenuOverlay(
                             }
                         }
                         MenuIconButton(
-                            if (ui.ttsRunning) "停止朗读" else "朗读",
+                            if (ui.ttsRunning) stringResource(R.string.btn_stop_listen)
+                            else stringResource(R.string.btn_listen),
                             if (ui.ttsRunning) Icons.Filled.StopCircle
                             else Icons.Filled.RecordVoiceOver,
                             palette
@@ -297,7 +303,7 @@ fun ReaderMenuOverlay(
                             vm.toggleTts()
                         }
                         MenuIconButton(
-                            "自动滚动",
+                            stringResource(R.string.btn_autoscroll),
                             Icons.Filled.PlayCircle,
                             palette
                         ) {
@@ -450,12 +456,13 @@ private fun TocSheetContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "目录 · ${ui.chapters.size} 章",
+                stringResource(R.string.toc_title, ui.chapters.size),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
             Text(
-                if (reversed) "倒序 ⇅" else "正序 ⇅",
+                if (reversed) stringResource(R.string.toc_order_desc)
+                else stringResource(R.string.toc_order_asc),
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 13.sp,
                 modifier = Modifier
@@ -504,7 +511,7 @@ private fun BookmarkSheetContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "书签 · ${ui.bookmarks.size}",
+                stringResource(R.string.bookmarks_title, ui.bookmarks.size),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
@@ -517,12 +524,12 @@ private fun BookmarkSheetContent(
             ) {
                 Icon(
                     Icons.Filled.Add,
-                    contentDescription = "新增",
+                    contentDescription = stringResource(R.string.cd_add),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    "添加当前页",
+                    stringResource(R.string.add_current_page),
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 13.sp
                 )
@@ -530,7 +537,7 @@ private fun BookmarkSheetContent(
         }
         if (ui.bookmarks.isEmpty()) {
             Text(
-                "暂无书签，点击右上角添加",
+                stringResource(R.string.bookmarks_empty),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(20.dp)
@@ -572,7 +579,7 @@ private fun BookmarkSheetContent(
                     IconButton(onClick = { vm.deleteBookmark(bm) }) {
                         Icon(
                             Icons.Filled.Delete,
-                            contentDescription = "删除",
+                            contentDescription = stringResource(R.string.cd_delete),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
@@ -595,12 +602,12 @@ private fun SearchSheetContent(
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("书内搜索") },
+            placeholder = { Text(stringResource(R.string.cd_search_in_book)) },
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
             trailingIcon = {
                 IconButton(onClick = { if (query.isNotBlank()) vm.search(query) }) {
-                    Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search))
                 }
             },
             modifier = Modifier
@@ -609,10 +616,10 @@ private fun SearchSheetContent(
         )
         Text(
             when {
-                ui.searching -> "搜索中…"
-                ui.searchResults == null -> "输入关键词，在整本书中查找"
-                ui.searchResults.isEmpty() -> "没有找到「$query」"
-                else -> "共 ${ui.searchResults.size} 处结果"
+                ui.searching -> stringResource(R.string.search_searching)
+                ui.searchResults == null -> stringResource(R.string.search_hint)
+                ui.searchResults.isEmpty() -> stringResource(R.string.search_none, query)
+                else -> stringResource(R.string.search_count, ui.searchResults.size)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
