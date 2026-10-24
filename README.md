@@ -4,7 +4,7 @@
 
 # 墨阅 · MoYue Reader
 
-**纯本地、零网络权限、无广告的 Android 小说阅读器**
+**纯本地、无广告的 Android 小说阅读器 · 联网仅用于检查更新**
 
 [![Release](https://img.shields.io/github/v/release/vswk001/novel-reader?style=flat-square&label=%E5%8F%91%E5%B8%83)](../../releases)
 [![Platform](https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android)](https://developer.android.com)
@@ -64,7 +64,7 @@
 
 - 中 / 英双语，跟随系统语言，Android 13+ 支持按应用单独设置语言
 - 5 套阅读主题 + 跟随系统深色、亮度手势（左半屏上下拖动）、音量键翻页、屏幕常亮
-- 全程离线，**不申请任何网络权限**，无广告、无遥测
+- 全程离线阅读（联网仅用于「检查更新」，地址可在设置中自定义），无广告、无遥测
 
 ## 📥 下载
 
@@ -122,6 +122,8 @@ app/src/main/java/com/moyue/reader/
 ├── privacy/        PBKDF2 密码 · 图案锁 · BiometricPrompt
 ├── settings/ stats/ ui/ di/
 ```
+
+**隐私与网络**：不采集任何数据；唯一联网行为是用户主动点击「检查更新」（默认源为 GitHub Releases API，可自定义）。
 
 **关键设计**：分页引擎与页面渲染共用同一套 StaticLayout 参数与 Span 构建（`PageSpans`），图片行高测量与显示完全一致；阅读进度 / 划线 / 书签统一以字符偏移存储，字号行距变化与章节重切后自动映射。
 

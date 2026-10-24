@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -437,6 +439,150 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                     fontSize = 13.sp,
                     lineHeight = 20.sp
                 )
+            }
+
+            // ---------- 检查更新 ----------
+            var checking by remember { mutableStateOf(false) }
+            var updateResult by remember {
+                mutableStateOf<com.moyue.reader.data.update.UpdateChecker.ReleaseInfo?>(null)
+            }
+            var updateError by remember { mutableStateOf<String?>(null) }
+            var updateLatest by remember { mutableStateOf(false) }
+            var feedInput by remember(prefs.updateFeedUrl) { mutableStateOf(prefs.updateFeedUrl) }
+            val defaultFeed = stringResource(R.string.default_update_feed)
+            val releasePage = stringResource(R.string.default_release_page)
+            val context2 = context
+
+            fun checkUpdate() {
+                checking = true
+                updateResult = null
+                updateError = null
+                updateLatest = false
+                scope.launch {
+                    val url = feedInput.trim().ifEmpty { defaultFeed }
+                    com.moyue.reader.data.update.UpdateChecker.fetch(url)
+                        .onSuccess { info ->
+                            if (com.moyue.reader.data.update.UpdateChecker.isNewer(
+                                    info.tag, com.moyue.reader.BuildConfig.VERSION_NAME
+                                )
+                            ) {
+                                updateResult = info
+                            } else {
+                                updateLatest = true
+                            }
+                        }
+                        .onFailure { e ->
+                            updateError = context2.getString(
+                                R.string.update_failed_detail, e.message ?: ""
+                            )
+                        }
+                    checking = false
+                }
+            }
+
+            SectionCard(stringResource(R.string.sec_update)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.update_current_fmt, com.moyue.reader.BuildConfig.VERSION_NAME))
+                        Text(
+                            if (feedInput.isBlank()) stringResource(R.string.update_feed_default)
+                            else stringResource(R.string.update_feed_custom),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(onClick = { checkUpdate() }, enabled = !checking) {
+                        Text(
+                            if (checking) stringResource(R.string.update_checking)
+                            else stringResource(R.string.btn_check_update)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = feedInput,
+                    onValueChange = { feedInput = it },
+                    placeholder = { Text(defaultFeed, maxLines = 1) },
+                    singleLine = true,
+                    supportingText = { Text(stringResource(R.string.update_feed_hint)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = {
+                    update { it.copy(updateFeedUrl = feedInput.trim()) }
+                }) {
+                    Text(stringResource(R.string.update_feed_save))
+                }
+            }
+
+            // 检查结果：已是最新
+            if (updateLatest) {
+                com.moyue.reader.ui.common.MoyueDialog(
+                    onDismissRequest = { updateLatest = false },
+                    title = stringResource(R.string.update_ok_title),
+                    subtitle = stringResource(
+                        R.string.update_latest, com.moyue.reader.BuildConfig.VERSION_NAME
+                    ),
+                    dismissText = stringResource(R.string.btn_close)
+                ) {}
+            }
+            // 检查结果：新版本
+            updateResult?.let { info ->
+                com.moyue.reader.ui.common.MoyueDialog(
+                    onDismissRequest = { updateResult = null },
+                    title = stringResource(R.string.update_new_title, info.tag),
+                    subtitle = info.name,
+                    confirmText = stringResource(
+                        if (info.apkUrl != null) R.string.update_download else R.string.update_open_page
+                    ),
+                    onConfirm = {
+                        val target = info.apkUrl ?: info.htmlUrl ?: releasePage
+                        runCatching {
+                            context2.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(target)
+                                )
+                            )
+                        }
+                    }
+                ) {
+                    Text(
+                        (info.notes.orEmpty().ifBlank { info.name.orEmpty() })
+                            .replace("#", "")
+                            .replace("*", "")
+                            .replace("```", "")
+                            .take(1200),
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            // 检查结果：失败
+            updateError?.let { msg ->
+                com.moyue.reader.ui.common.MoyueDialog(
+                    onDismissRequest = { updateError = null },
+                    title = stringResource(R.string.update_failed_title),
+                    subtitle = msg,
+                    dismissText = stringResource(R.string.btn_close)
+                ) {
+                    com.moyue.reader.ui.common.ActionRow(
+                        Icons.Filled.OpenInBrowser,
+                        stringResource(R.string.update_open_page),
+                        releasePage
+                    ) {
+                        runCatching {
+                            context2.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(releasePage)
+                                )
+                            )
+                        }
+                        updateError = null
+                    }
+                }
             }
 
             Spacer(Modifier.height(32.dp))

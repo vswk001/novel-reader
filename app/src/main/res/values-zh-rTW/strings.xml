@@ -264,4 +264,22 @@
     <string name="hl_export">导出</string>
     <string name="hl_empty">暂无划线，长按正文选中文字即可添加</string>
     <string name="btn_notes">笔记</string>
+    <string name="default_update_feed">https://api.github.com/repos/vswk001/novel-reader/releases/latest</string>
+    <string name="default_release_page">https://github.com/vswk001/novel-reader/releases</string>
+    <string name="sec_update">检查更新</string>
+    <string name="update_current_fmt">当前版本 v%1$s</string>
+    <string name="btn_check_update">检查更新</string>
+    <string name="update_checking">正在检查…</string>
+    <string name="update_ok_title">已是最新</string>
+    <string name="update_latest">当前已是最新版本（v%1$s）</string>
+    <string name="update_new_title">发现新版本 %1$s</string>
+    <string name="update_download">下载更新</string>
+    <string name="update_open_page">查看发布页</string>
+    <string name="update_failed_title">更新检查失败</string>
+    <string name="update_failed_detail">%1$s
+请检查网络，或在下方配置自定义更新源（私有仓库无法匿名检查）。</string>
+    <string name="update_feed_default">使用内置更新源</string>
+    <string name="update_feed_custom">使用自定义更新源</string>
+    <string name="update_feed_hint">需为 GitHub Releases /latest 兼容的 JSON 接口；留空使用默认源。</string>
+    <string name="update_feed_save">保存更新源</string>
 </resources>

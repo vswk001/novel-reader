@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 联网仅用于「检查更新」，不用于任何其它数据收发 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".MoyueApp"
         android:allowBackup="true"
