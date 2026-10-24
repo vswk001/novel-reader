@@ -189,7 +189,7 @@
     <string name="msg_restore_ok">Restore finished: matched %1$d books (files must be on this device), merged progress of %2$d</string>
     <string name="msg_restore_fail">Restore failed: %1$s</string>
     <string name="sec_about">About</string>
-    <string name="about_text">MoYue v1.8.0 · Offline novel reader\nNo network permission, no ads, no telemetry</string>
+    <string name="about_text">MoYue v1.9.0 · Offline novel reader\nNo network permission, no ads, no telemetry</string>
 
     <!-- Stats -->
     <string name="stats_title">Reading stats</string>
@@ -252,4 +252,16 @@
     <string name="stats_goal_value">%1$d / %2$d min</string>
     <string name="stats_streak">%1$d-day streak 🔥</string>
     <string name="stats_goal_hint">Drag the slider to adjust your daily goal</string>
+    <string name="hl_copy">Copy</string>
+    <string name="hl_note">Note</string>
+    <string name="hl_note_title">Highlight &amp; note</string>
+    <string name="hl_note_hint">Write a note (optional)</string>
+    <string name="hl_color">Color</string>
+    <string name="hl_save">Save</string>
+    <string name="hl_delete">Delete</string>
+    <string name="hl_edit">Edit</string>
+    <string name="hl_sheet_title">Highlights · %1$d</string>
+    <string name="hl_export">Export</string>
+    <string name="hl_empty">No highlights yet. Long-press text to select.</string>
+    <string name="btn_notes">Notes</string>
 </resources>

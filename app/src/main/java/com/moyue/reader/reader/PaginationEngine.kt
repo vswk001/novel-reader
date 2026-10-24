@@ -17,7 +17,7 @@ class PaginationEngine(
     /** 章节文本的字符区间 [start, end) */
     data class Page(val start: Int, val end: Int)
 
-    fun paginate(text: String): List<Page> {
+    fun paginate(text: CharSequence): List<Page> {
         if (text.isEmpty()) return listOf(Page(0, 0))
         val layout = buildLayout(text)
         val pages = mutableListOf<Page>()
@@ -47,7 +47,7 @@ class PaginationEngine(
         return pages
     }
 
-    fun buildLayout(text: String): StaticLayout =
+    fun buildLayout(text: CharSequence): StaticLayout =
         StaticLayout.Builder.obtain(text, 0, text.length, paint, pageWidth.coerceAtLeast(1))
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setLineSpacing(0f, lineSpacingMult)

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,10 +62,12 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -72,12 +75,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
@@ -141,6 +147,74 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 
     val scrollState = rememberLazyListState()
+
+    // ---------- 文本选择 / 划线高亮 ----------
+    val pageLayouts = remember { androidx.compose.runtime.snapshots.SnapshotStateMap<Int, StaticLayout>() }
+    var selStart by remember { mutableStateOf<Int?>(null) }
+    var selEnd by remember { mutableStateOf<Int?>(null) }
+    var editHl by remember { mutableStateOf<com.moyue.reader.data.db.HighlightEntity?>(null) }
+    var newNoteSel by remember { mutableStateOf<IntRange?>(null) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val imageDir = remember(ui.book?.id) {
+        ui.book?.let { Graph.bookRepository.imageDir(it.id) }
+    }
+    val selection: IntRange? =
+        if (selStart != null && selEnd != null && selEnd!! >= selStart!!) selStart!!..selEnd!! else null
+
+    fun clearSelection() {
+        selStart = null; selEnd = null
+    }
+    fun setSelectionPoint(isStartHandle: Boolean, absOffset: Int) {
+        val len = ui.chapterText.length
+        val off = absOffset.coerceIn(0, len)
+        if (isStartHandle) {
+            selStart = off
+            if (selEnd != null && selEnd!! < off) selEnd = off
+        } else {
+            selEnd = off
+            if (selStart != null && selStart!! > off) selStart = off
+        }
+    }
+
+    /** 根坐标 → (页布局, 页内坐标, 页)，不可命中返回 null */
+    fun hitTest(pos: Offset): Triple<StaticLayout, Offset, PaginationEngine.Page>? {
+        val idx = if (prefs.readMode == ReadMode.SCROLL) {
+            val header = if (ui.chapterIdx > 0) 1 else 0
+            scrollState.firstVisibleItemIndex - header
+        } else ui.pageIdx
+        val page = ui.pages.getOrNull(idx) ?: return null
+        val layout = pageLayouts[page.start] ?: return null
+        val x = pos.x - with(density) { padH.toPx() }
+        val y = pos.y - with(density) { padV.toPx() }
+        if (x < 0f || y < 0f) return null
+        return Triple(layout, Offset(x, y), page)
+    }
+
+    fun offsetAt(pos: Offset): Int? {
+        val (layout, local, page) = hitTest(pos) ?: return null
+        val line = layout.getLineForVertical(local.y.toInt())
+        return layout.getOffsetForHorizontal(line, local.x)
+            .coerceIn(0, (page.end - page.start).coerceAtLeast(0)) + page.start
+    }
+
+    /** 长按 → 选中词 */
+    fun selectWordAt(pos: Offset) {
+        val off = offsetAt(pos) ?: return
+        val wr = PageSpans.wordAt(ui.chapterText, off)
+        selStart = wr.first
+        selEnd = wr.last
+    }
+
+    /** 点击命中已有高亮 */
+    fun highlightAt(pos: Offset): com.moyue.reader.data.db.HighlightEntity? {
+        val off = offsetAt(pos) ?: return null
+        return ui.highlights.firstOrNull { it.chapterIdx == ui.chapterIdx && off >= it.start && off < it.end }
+    }
+
+    // 翻页/切章/菜单打开时清除选区
+    LaunchedEffect(ui.pageIdx, ui.chapterIdx, ui.menuVisible) {
+        if (selStart != null) clearSelection()
+    }
 
     // ---------- 亮度手势：左半屏上下拖动调节（松手持久化，拖动中实时生效） ----------
     var brightnessDragActive by remember { mutableStateOf(false) }
@@ -342,21 +416,33 @@ fun ReaderScreen(onBack: () -> Unit) {
                     }
                 )
             }
-            .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible, ui.autoScroll) {
-                detectTapGestures { offset ->
-                    // 优先级：收菜单 > 停滚动 > 区域翻页/呼出菜单
-                    if (ui.menuVisible) {
-                        vm.setMenuVisible(false)
-                        return@detectTapGestures
-                    }
-                    if (ui.autoScroll) {
-                        vm.setAutoScroll(false)
-                        return@detectTapGestures
-                    }
-                    if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {
-                        vm.toggleMenu()
-                        return@detectTapGestures
-                    }
+            .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible, ui.autoScroll, ui.chapterIdx) {
+                detectTapGestures(
+                    onLongPress = { pos ->
+                        if (!ui.menuVisible && !ui.autoScroll) selectWordAt(pos)
+                    },
+                    onTap = { offset ->
+                        // 优先级：收菜单 > 停滚动 > 命中高亮 > 清选区 > 区域翻页/呼出菜单
+                        if (ui.menuVisible) {
+                            vm.setMenuVisible(false)
+                            return@detectTapGestures
+                        }
+                        if (ui.autoScroll) {
+                            vm.setAutoScroll(false)
+                            return@detectTapGestures
+                        }
+                        highlightAt(offset)?.let {
+                            editHl = it
+                            return@detectTapGestures
+                        }
+                        if (selStart != null) {
+                            clearSelection()
+                            return@detectTapGestures
+                        }
+                        if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {
+                            vm.toggleMenu()
+                            return@detectTapGestures
+                        }
                     val w = size.width
                     val h = size.height
                     when (prefs.tapZone) {
@@ -371,7 +457,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                             else -> vm.toggleMenu()
                         }
                     }
-                }
+                })
             }
     ) {
         Column(
@@ -410,7 +496,15 @@ fun ReaderScreen(onBack: () -> Unit) {
                         textColor = palette.text,
                         accentColor = palette.secondary,
                         hasPrev = ui.chapterIdx > 0,
-                        hasNext = ui.chapterIdx < ui.chapters.size - 1
+                        hasNext = ui.chapterIdx < ui.chapters.size - 1,
+                        highlights = ui.highlights,
+                        images = ui.images,
+                        imageDir = imageDir,
+                        selection = selection,
+                        onLayoutBuilt = { k, l ->
+                            if (l != null) pageLayouts[k] = l else pageLayouts.remove(k)
+                        },
+                        onSelectionDrag = { isStart, off -> setSelectionPoint(isStart, off) }
                     )
 
                     else -> HorizontalPager(
@@ -430,6 +524,15 @@ fun ReaderScreen(onBack: () -> Unit) {
                                 lineSpacing = prefs.lineSpacing,
                                 widthPx = textAreaSize.width,
                                 textColor = palette.text,
+                                pageHeightPx = textAreaSize.height,
+                                highlights = ui.highlights,
+                                images = ui.images,
+                                imageDir = imageDir,
+                                selection = selection,
+                                onLayoutBuilt = { k, l ->
+                                    if (l != null) pageLayouts[k] = l else pageLayouts.remove(k)
+                                },
+                                onSelectionDrag = { isStart, off -> setSelectionPoint(isStart, off) },
                                 pageAnim = prefs.pageAnim,
                                 pagerState = pagerState,
                                 pageIdx = pageIdx
@@ -514,6 +617,104 @@ fun ReaderScreen(onBack: () -> Unit) {
             onBack = onBack
         )
 
+        // 划线工具条（选区激活时）
+        selection?.let { sel ->
+            val len = ui.chapterText.length
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = palette.menuBg.copy(alpha = 0.98f),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = padV + 4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.hl_copy),
+                        color = palette.menuText,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clickable {
+                                val s = sel.first.coerceIn(0, len)
+                                val e = (sel.last + 1).coerceIn(0, len)
+                                if (e > s) clipboard.setText(
+                                    androidx.compose.ui.text.AnnotatedString(ui.chapterText.substring(s, e))
+                                )
+                                clearSelection()
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    )
+                    PageSpans.HIGHLIGHT_COLORS.forEachIndexed { i, c ->
+                        Box(
+                            Modifier
+                                .padding(horizontal = 4.dp)
+                                .size(20.dp)
+                                .background(
+                                    androidx.compose.ui.graphics.Color(c),
+                                    androidx.compose.foundation.shape.CircleShape
+                                )
+                                .clickable {
+                                    vm.addHighlight(sel.first, sel.last + 1, i)
+                                    clearSelection()
+                                }
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.hl_note),
+                        color = palette.menuText,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clickable {
+                                newNoteSel = sel
+                                clearSelection()
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    )
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.btn_close),
+                        tint = palette.secondary,
+                        modifier = Modifier
+                            .clickable { clearSelection() }
+                            .padding(8.dp)
+                            .size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // 高亮编辑（点击已有划线）
+        editHl?.let { h ->
+            HighlightNoteDialog(
+                excerpt = h.text,
+                initialNote = h.note,
+                initialColor = h.color,
+                onSave = { n, c -> vm.updateHighlight(h, n, c); editHl = null },
+                onDelete = { vm.deleteHighlight(h); editHl = null },
+                onDismiss = { editHl = null }
+            )
+        }
+        // 新建划线笔记（工具条「笔记」）
+        newNoteSel?.let { sel ->
+            val len = ui.chapterText.length
+            HighlightNoteDialog(
+                excerpt = ui.chapterText.substring(
+                    sel.first.coerceIn(0, len),
+                    (sel.last + 1).coerceIn(0, len)
+                ),
+                initialNote = "",
+                initialColor = 0,
+                onSave = { n, c ->
+                    vm.addHighlight(sel.first, sel.last + 1, c, n)
+                    newNoteSel = null
+                },
+                onDismiss = { newNoteSel = null }
+            )
+        }
+
         // 自动滚动专用悬浮控制条（最高层，滚动期间常驻：停止 / 减速 / 加速）
         if (ui.autoScroll) {
             Surface(
@@ -589,7 +790,13 @@ private fun ScrollReaderContent(
     textColor: Color,
     accentColor: Color,
     hasPrev: Boolean,
-    hasNext: Boolean
+    hasNext: Boolean,
+    highlights: List<com.moyue.reader.data.db.HighlightEntity> = emptyList(),
+    images: List<com.moyue.reader.data.db.BookImageEntity> = emptyList(),
+    imageDir: java.io.File? = null,
+    selection: IntRange? = null,
+    onLayoutBuilt: ((Int, StaticLayout?) -> Unit)? = null,
+    onSelectionDrag: ((Boolean, Int) -> Unit)? = null
 ) {
     val headerCount = if (hasPrev) 1 else 0
 
@@ -655,6 +862,13 @@ private fun ScrollReaderContent(
                     lineSpacing = lineSpacing,
                     widthPx = widthPx,
                     textColor = textColor,
+                    pageHeightPx = pageHeightPx,
+                    highlights = highlights,
+                    images = images,
+                    imageDir = imageDir,
+                    selection = selection,
+                    onLayoutBuilt = onLayoutBuilt,
+                    onSelectionDrag = onSelectionDrag,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -693,7 +907,7 @@ private fun ScrollChapterButton(label: String, color: Color, onClick: () -> Unit
     }
 }
 
-/** 与分页完全相同的 StaticLayout 参数渲染一页文本（无翻页动画，两种模式共用） */
+/** 与分页完全相同的 StaticLayout 参数渲染一页（无翻页动画，两种模式共用）；支持高亮/图片/选区 */
 @Composable
 fun StaticPage(
     text: String,
@@ -703,6 +917,13 @@ fun StaticPage(
     lineSpacing: Float,
     widthPx: Int,
     textColor: Color,
+    pageHeightPx: Int = 0,
+    highlights: List<com.moyue.reader.data.db.HighlightEntity> = emptyList(),
+    images: List<com.moyue.reader.data.db.BookImageEntity> = emptyList(),
+    imageDir: java.io.File? = null,
+    selection: IntRange? = null,
+    onLayoutBuilt: ((Int, StaticLayout?) -> Unit)? = null,
+    onSelectionDrag: ((isStartHandle: Boolean, absOffset: Int) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val paint = remember(textSizePx, serif, textColor) {
@@ -717,19 +938,113 @@ fun StaticPage(
             )
         }
     }
-    val layout = remember(text, page, paint, widthPx, lineSpacing) {
-        val from = page.start.coerceIn(0, text.length)
-        val to = page.end.coerceIn(from, text.length)
-        val sub = text.substring(from, to)
-        StaticLayout.Builder.obtain(sub, 0, sub.length, paint, widthPx.coerceAtLeast(1))
+    val from = page.start.coerceIn(0, text.length)
+    val to = page.end.coerceIn(from, text.length)
+    val spanned = remember(text, page, paint, widthPx, lineSpacing, highlights, images, selection, pageHeightPx) {
+        PageSpans.apply(
+            text.substring(from, to), from,
+            highlights, selection, images
+        ) { img ->
+            if (imageDir == null || pageHeightPx <= 0) null
+            else PageImageDrawable(
+                java.io.File(imageDir, img.fileName),
+                img.srcW, img.srcH,
+                maxW = widthPx, maxH = (pageHeightPx * 0.7f).toInt()
+            )
+        }
+    }
+    val layout = remember(spanned, paint, widthPx, lineSpacing) {
+        StaticLayout.Builder.obtain(spanned, 0, spanned.length, paint, widthPx.coerceAtLeast(1))
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setLineSpacing(0f, lineSpacing)
             .setIncludePad(false)
             .build()
     }
-    androidx.compose.foundation.Canvas(modifier) {
-        layout.draw(drawContext.canvas.nativeCanvas)
+    // 向上注册本页布局（长按命中测试/工具条定位用）
+    onLayoutBuilt?.let { cb ->
+        androidx.compose.runtime.DisposableEffect(page.start) {
+            cb(page.start, layout)
+            onDispose { cb(page.start, null) }
+        }
     }
+
+    // 选区手柄位置（本页局部坐标 px）
+    val selLocal = selection?.let { sel ->
+        val s = sel.first - from
+        val e = sel.last - from
+        if (e >= 0 && s < to - from && s <= e) s..e else null
+    }
+    val handleColor = MaterialTheme.colorScheme.primary
+    var draggingHandle by remember(page.start) { mutableStateOf(-1) }
+
+    Box(modifier) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            layout.draw(drawContext.canvas.nativeCanvas)
+        }
+        if (selLocal != null && onSelectionDrag != null) {
+            val startHandle = handlePoint(layout, selLocal.first)
+            val endHandle = handlePoint(layout, selLocal.last + 1)
+            @Composable
+            fun handle(pos: Offset, isStart: Boolean) {
+                Box(
+                    Modifier
+                        .offset { IntOffset((pos.x - 9.dp.toPx()).roundToInt(), (pos.y - 20.dp.toPx()).roundToInt()) }
+                        .size(18.dp, 24.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .align(if (isStart) Alignment.TopStart else Alignment.TopEnd)
+                            .size(5.dp, 20.dp)
+                            .background(handleColor, RoundedCornerShape(3.dp))
+                    )
+                    Box(
+                        Modifier
+                            .align(if (isStart) Alignment.TopStart else Alignment.TopEnd)
+                            .padding(top = 16.dp)
+                            .size(18.dp)
+                            .background(handleColor, androidx.compose.foundation.shape.CircleShape)
+                    )
+                }
+            }
+            handle(startHandle, true)
+            handle(endHandle, false)
+            // 拖动手柄：起点落在任一手柄附近即可拖动调整选区
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(page.start, selLocal) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val nearStart = (down.position - startHandle).getDistance() < 72f
+                            val nearEnd = (down.position - endHandle).getDistance() < 72f
+                            if (!nearStart && !nearEnd) return@awaitEachGesture
+                            val which = if (nearStart) 0 else 1
+                            var dragging = true
+                            while (dragging) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: break
+                                if (change.changedToUp()) {
+                                    dragging = false
+                                } else if (change.pressed) {
+                                    val line = layout.getLineForVertical(change.position.y.toInt())
+                                    val off = layout.getOffsetForHorizontal(line, change.position.x)
+                                    onSelectionDrag(which == 0, off + page.start)
+                                    change.consume()
+                                }
+                            }
+                        }
+                    }
+            )
+        }
+    }
+}
+
+private fun handlePoint(layout: StaticLayout, localOffset: Int): Offset {
+    val line = layout.getLineForOffset(localOffset.coerceIn(0, layout.text.length))
+    return Offset(
+        layout.getPrimaryHorizontal(localOffset.coerceIn(0, layout.text.length)),
+        layout.getLineBottom(line).toFloat()
+    )
 }
 
 /** 翻页模式页面 + 翻页动画 */
@@ -742,6 +1057,13 @@ private fun PageCanvas(
     lineSpacing: Float,
     widthPx: Int,
     textColor: Color,
+    pageHeightPx: Int = 0,
+    highlights: List<com.moyue.reader.data.db.HighlightEntity> = emptyList(),
+    images: List<com.moyue.reader.data.db.BookImageEntity> = emptyList(),
+    imageDir: java.io.File? = null,
+    selection: IntRange? = null,
+    onLayoutBuilt: ((Int, StaticLayout?) -> Unit)? = null,
+    onSelectionDrag: ((Boolean, Int) -> Unit)? = null,
     pageAnim: PageAnim,
     pagerState: PagerState,
     pageIdx: Int
@@ -798,6 +1120,13 @@ private fun PageCanvas(
         lineSpacing = lineSpacing,
         widthPx = widthPx,
         textColor = textColor,
+        pageHeightPx = pageHeightPx,
+        highlights = highlights,
+        images = images,
+        imageDir = imageDir,
+        selection = selection,
+        onLayoutBuilt = onLayoutBuilt,
+        onSelectionDrag = onSelectionDrag,
         modifier = Modifier
             .fillMaxSize()
             .then(animModifier)

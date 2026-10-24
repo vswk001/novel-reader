@@ -12,9 +12,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         BookEntity::class,
         ChapterEntity::class,
         BookmarkEntity::class,
-        ReadStatEntity::class
+        ReadStatEntity::class,
+        HighlightEntity::class,
+        BookImageEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -22,6 +24,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun chapterDao(): ChapterDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun readStatDao(): ReadStatDao
+    abstract fun highlightDao(): HighlightDao
+    abstract fun bookImageDao(): BookImageDao
 
     companion object {
         /** v1→v2：书籍增加 space 字段（0=普通书架，1=隐私空间），保留现有数据 */
@@ -38,9 +42,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3→v4：划线高亮 + EPUB 内联图片占位两张新表 */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS highlights (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "bookId INTEGER NOT NULL, chapterIdx INTEGER NOT NULL, start INTEGER NOT NULL, " +
+                        "end INTEGER NOT NULL, text TEXT NOT NULL, note TEXT NOT NULL, " +
+                        "color INTEGER NOT NULL, createdAt INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS book_images (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "bookId INTEGER NOT NULL, chapterIdx INTEGER NOT NULL, charOffset INTEGER NOT NULL, " +
+                        "fileName TEXT NOT NULL, srcW INTEGER NOT NULL, srcH INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "moyue.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

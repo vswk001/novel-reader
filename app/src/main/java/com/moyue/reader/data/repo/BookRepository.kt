@@ -4,10 +4,13 @@ import android.content.Context
 import com.moyue.reader.R
 import com.moyue.reader.data.db.AppDatabase
 import com.moyue.reader.data.db.BookEntity
+import com.moyue.reader.data.db.BookImageEntity
 import com.moyue.reader.data.db.BookmarkEntity
 import com.moyue.reader.data.db.ChapterEntity
+import com.moyue.reader.data.db.HighlightEntity
 import com.moyue.reader.data.db.ReadStatEntity
 import com.moyue.reader.data.importer.ChapterParser
+import com.moyue.reader.reader.PageSpans
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -26,6 +29,8 @@ class BookRepository(
     private val chapterDao = db.chapterDao()
     private val bookmarkDao = db.bookmarkDao()
     private val statDao = db.readStatDao()
+    private val highlightDao = db.highlightDao()
+    private val imageDao = db.bookImageDao()
 
     fun observeBooks(space: Int): Flow<List<BookEntity>> = bookDao.observeAll(space)
 
@@ -220,6 +225,36 @@ class BookRepository(
 
     suspend fun deleteBookmark(b: BookmarkEntity) = bookmarkDao.delete(b)
 
+    // ---- 划线高亮 ----
+
+    fun observeHighlights(bookId: Long): Flow<List<HighlightEntity>> =
+        highlightDao.observeForBook(bookId)
+
+    suspend fun listHighlightsOnce(bookId: Long): List<HighlightEntity> =
+        highlightDao.listForBook(bookId)
+
+    suspend fun addHighlight(
+        bookId: Long, chapterIdx: Int, start: Int, end: Int, text: String, note: String, color: Int
+    ): Long = highlightDao.insert(
+        HighlightEntity(
+            bookId = bookId, chapterIdx = chapterIdx, start = start, end = end,
+            text = text, note = note, color = color, createdAt = System.currentTimeMillis()
+        )
+    )
+
+    suspend fun updateHighlight(h: HighlightEntity) = highlightDao.update(h)
+
+    suspend fun deleteHighlight(h: HighlightEntity) = highlightDao.delete(h)
+
+    // ---- EPUB 内联图片 ----
+
+    fun imageDir(bookId: Long): File = File(booksDir, "${bookId}_img")
+
+    suspend fun imagesForChapter(bookId: Long, chapterIdx: Int): List<BookImageEntity> =
+        imageDao.listForChapter(bookId, chapterIdx)
+
+    suspend fun saveImages(items: List<BookImageEntity>) = imageDao.insertAll(items)
+
     suspend fun deleteBook(book: BookEntity, deleteFile: Boolean) {
         deleteBookById(book.id, deleteFile)
     }
@@ -228,8 +263,11 @@ class BookRepository(
         bookDao.delete(bookId)
         chapterDao.deleteForBook(bookId)
         bookmarkDao.deleteForBook(bookId)
+        highlightDao.deleteForBook(bookId)
+        imageDao.deleteForBook(bookId)
         if (deleteFile) {
             bookFile(bookId).delete()
+            imageDir(bookId).deleteRecursively()
         }
     }
 
@@ -274,7 +312,10 @@ class BookRepository(
                     chapterIdx = ch.idx,
                     chapterTitle = ch.title,
                     charOffset = ch.charStart + i,
-                    snippet = text.substring(snipStart, snipEnd).replace('\n', ' ').trim()
+                    snippet = text.substring(snipStart, snipEnd)
+                        .replace('\n', ' ')
+                        .replace(PageSpans.IMG_CHAR, ' ')
+                        .trim()
                 )
                 from = i + q.length
                 if (hits.size >= limit) return@withContext hits

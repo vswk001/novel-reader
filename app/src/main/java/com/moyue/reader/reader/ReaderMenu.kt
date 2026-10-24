@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PauseCircle
@@ -72,7 +73,7 @@ import com.moyue.reader.data.repo.ReaderThemeKind
 import com.moyue.reader.ui.common.ActionRow
 import com.moyue.reader.ui.common.MoyueDialog
 
-private enum class ReaderSheet { TOC, BOOKMARK, SEARCH }
+private enum class ReaderSheet { TOC, BOOKMARK, HIGHLIGHT, SEARCH }
 
 /**
  * 阅读菜单：顶部返回栏 + 底部悬浮圆角面板（适配导航栏/刘海安全区）。
@@ -286,6 +287,9 @@ fun ReaderMenuOverlay(
                         MenuIconButton(stringResource(R.string.btn_bookmarks), Icons.Filled.Star, palette) {
                             sheet = ReaderSheet.BOOKMARK
                         }
+                        MenuIconButton(stringResource(R.string.btn_notes), Icons.Filled.Edit, palette) {
+                            sheet = ReaderSheet.HIGHLIGHT
+                        }
                         MenuIconButton(stringResource(R.string.btn_prev_chapter), Icons.Filled.KeyboardArrowUp, palette) {
                             vm.prevChapter()
                         }
@@ -413,6 +417,7 @@ fun ReaderMenuOverlay(
                     sheet = null
                 }
                 ReaderSheet.BOOKMARK -> BookmarkSheetContent(ui = ui, palette = palette, vm = vm)
+                ReaderSheet.HIGHLIGHT -> HighlightSheetContent(ui = ui, palette = palette, vm = vm)
                 ReaderSheet.SEARCH -> SearchSheetContent(ui = ui, palette = palette, vm = vm) {
                     vm.jumpToAbsOffset(it.chapterIdx, it.charOffset)
                     sheet = null
@@ -666,6 +671,149 @@ private fun BookmarkSheetContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HighlightSheetContent(
+    ui: ReaderViewModel.UiState,
+    palette: ReaderPalette,
+    vm: ReaderViewModel
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var editHl by remember { mutableStateOf<com.moyue.reader.data.db.HighlightEntity?>(null) }
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(R.string.hl_sheet_title, ui.highlights.size),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            if (ui.highlights.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.hl_export),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            val sb = StringBuilder()
+                            sb.append(ui.book?.title.orEmpty()).append("\n\n")
+                            for (h in ui.highlights) {
+                                val chTitle = ui.chapters.getOrNull(h.chapterIdx)?.title.orEmpty()
+                                sb.append("◆ ").append(chTitle).append('\n')
+                                sb.append(h.text).append('\n')
+                                if (h.note.isNotBlank()) sb.append("✎ ").append(h.note).append('\n')
+                                sb.append('\n')
+                            }
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(
+                                    android.content.Intent.EXTRA_TEXT,
+                                    sb.toString().trim()
+                                )
+                            }
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent.createChooser(send, ui.book?.title)
+                                )
+                            }
+                        }
+                        .padding(8.dp)
+                )
+            }
+        }
+        if (ui.highlights.isEmpty()) {
+            Text(
+                stringResource(R.string.hl_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp)
+            )
+        }
+        LazyColumn(Modifier.height(460.dp)) {
+            items(ui.highlights, key = { it.id }) { h ->
+                val chapterTitle = ui.chapters.getOrNull(h.chapterIdx)?.title.orEmpty()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 4.dp, height = 36.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Color(PageSpans.highlightColor(h.color, 1f)),
+                                RoundedCornerShape(2.dp)
+                            )
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                val ch = ui.chapters.getOrNull(h.chapterIdx)
+                                vm.jumpToAbsOffset(h.chapterIdx, (ch?.charStart ?: 0) + h.start)
+                            }
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            chapterTitle,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            h.text,
+                            fontSize = 13.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (h.note.isNotBlank()) {
+                            Text(
+                                "✎ ${h.note}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    IconButton(onClick = { editHl = h }) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = stringResource(R.string.hl_edit),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = { vm.deleteHighlight(h) }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = stringResource(R.string.cd_delete),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+    editHl?.let { h ->
+        HighlightNoteDialog(
+            excerpt = h.text,
+            initialNote = h.note,
+            initialColor = h.color,
+            onSave = { n, c -> vm.updateHighlight(h, n, c); editHl = null },
+            onDelete = { vm.deleteHighlight(h); editHl = null },
+            onDismiss = { editHl = null }
+        )
     }
 }
 

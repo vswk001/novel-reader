@@ -44,6 +44,8 @@ class BookImporter(
             val charsetName: String
             val text: String
             val chapters: List<ChapterParser.Chapter>
+            // EPUB 图片：(字节集, 全书偏移+href 列表)，createBook 后落盘
+            var pendingImages: Pair<Map<String, ByteArray>, List<Triple<Int, Int, String>>>? = null
 
             if (name.substringAfterLast('.', "").equals("epub", ignoreCase = true)) {
                 // EPUB：结构化解析（OPF/spine/NCX），转成与 TXT 相同的规范化文本 + 章节偏移
@@ -51,15 +53,28 @@ class BookImporter(
                 if (epub.title.isNotBlank()) bookTitle = epub.title
                 val sb = StringBuilder()
                 val list = mutableListOf<ChapterParser.Chapter>()
-                for (c in epub.chapters) {
+                val imgPositions = mutableListOf<Triple<Int, Int, String>>() // (章idx, 全书偏移, href)
+                for ((ci, c) in epub.chapters.withIndex()) {
                     val start = sb.length
                     sb.append(c.title).append('\n')
-                    sb.append(TextNormalizer.normalize(c.text))
+                    val normalized = TextNormalizer.normalize(c.text)
+                    sb.append(normalized)
                     list += ChapterParser.Chapter(c.title, start, sb.length)
+                    // normalize 只动空白不删标记：按出现顺序重扫标记位置
+                    var hrefIdx = 0
+                    var from = 0
+                    while (hrefIdx < c.imageHrefs.size) {
+                        val p = normalized.indexOf(EpubParser.MARKER, from)
+                        if (p < 0) break
+                        imgPositions += Triple(ci, start + 1 + p, c.imageHrefs[hrefIdx])
+                        hrefIdx++
+                        from = p + 1
+                    }
                 }
                 charsetName = "EPUB"
                 text = sb.toString()
                 chapters = list
+                pendingImages = epub.images to imgPositions
             } else {
                 charsetName = CharsetDetector.detect(bytes)
                 val bom = CharsetDetector.bomLength(bytes)
@@ -80,6 +95,9 @@ class BookImporter(
             try {
                 repo.writeBookFile(bookId, text)
                 repo.saveChapters(bookId, chapters, text)
+                pendingImages?.let { (imgBytes, positions) ->
+                    saveEpubImages(bookId, chapters, imgBytes, positions)
+                }
             } catch (e: Exception) {
                 runCatching { repo.deleteBookById(bookId, deleteFile = true) }
                 throw e
@@ -96,6 +114,38 @@ class BookImporter(
             val reason = e.message ?: context.getString(R.string.err_unknown)
             ImportResult(name, false, context.getString(R.string.err_import_failed, reason))
         }
+    }
+
+    /** EPUB 图片落盘：写入 books/{bookId}_img/，记录章节内偏移与解码尺寸（分页测量用） */
+    private suspend fun saveEpubImages(
+        bookId: Long,
+        chapters: List<ChapterParser.Chapter>,
+        imgBytes: Map<String, ByteArray>,
+        positions: List<Triple<Int, Int, String>>
+    ) = withContext(Dispatchers.IO) {
+        if (positions.isEmpty()) return@withContext
+        val dir = repo.imageDir(bookId).apply { mkdirs() }
+        val entities = mutableListOf<com.moyue.reader.data.db.BookImageEntity>()
+        positions.forEachIndexed { i, (chapterIdx, absOffset, href) ->
+            val data = imgBytes[href] ?: return@forEachIndexed
+            val ch = chapters.getOrNull(chapterIdx) ?: return@forEachIndexed
+            val ext = href.substringAfterLast('.', "img").lowercase().take(4)
+            val fileName = "$i.$ext"
+            java.io.File(dir, fileName).writeBytes(data)
+            val bounds = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
+            entities += com.moyue.reader.data.db.BookImageEntity(
+                bookId = bookId,
+                chapterIdx = chapterIdx,
+                charOffset = (absOffset - ch.charStart).coerceAtLeast(0),
+                fileName = fileName,
+                srcW = bounds.outWidth.coerceAtLeast(1),
+                srcH = bounds.outHeight.coerceAtLeast(1)
+            )
+        }
+        if (entities.isNotEmpty()) repo.saveImages(entities)
     }
 
     /** 递归扫描 SAF 目录树，返回支持的文档 Uri */

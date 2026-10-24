@@ -36,6 +36,17 @@ class BackupManager(
     )
 
     @Serializable
+    data class BackupHighlight(
+        val chapterIdx: Int,
+        val start: Int,
+        val end: Int,
+        val text: String,
+        val note: String = "",
+        val color: Int = 0,
+        val createdAt: Long
+    )
+
+    @Serializable
     data class BackupBook(
         val title: String,
         val sizeBytes: Long,
@@ -50,7 +61,8 @@ class BackupManager(
         val pinned: Boolean,
         val coverHue: Int,
         val space: Int = 0,
-        val bookmarks: List<BackupBookmark>
+        val bookmarks: List<BackupBookmark>,
+        val highlights: List<BackupHighlight> = emptyList()
     )
 
     @Serializable
@@ -72,7 +84,8 @@ class BackupManager(
                 prefs = settings.current(),
                 books = books.map { b ->
                     b.toBackup().copy(
-                        bookmarks = repo.bookmarksOnce(b.id).map { it.toBackupBookmark() }
+                        bookmarks = repo.bookmarksOnce(b.id).map { it.toBackupBookmark() },
+                        highlights = repo.listHighlightsOnce(b.id).map { it.toBackupHighlight() }
                     )
                 }
             )
@@ -111,6 +124,17 @@ class BackupManager(
                         repo.addBookmark(target.id, bm.chapterIdx, bm.charOffset, bm.excerpt)
                     }
                 }
+                val existingHl = repo.listHighlightsOnce(target.id)
+                for (h in bk.highlights) {
+                    val dup = existingHl.any {
+                        it.chapterIdx == h.chapterIdx && it.start == h.start && it.end == h.end
+                    }
+                    if (!dup) {
+                        repo.addHighlight(
+                            target.id, h.chapterIdx, h.start, h.end, h.text, h.note, h.color
+                        )
+                    }
+                }
             }
             matched to merged
         }
@@ -146,3 +170,14 @@ private fun BookmarkEntity.toBackupBookmark() = BackupManager.BackupBookmark(
     excerpt = excerpt,
     createdAt = createdAt
 )
+
+private fun com.moyue.reader.data.db.HighlightEntity.toBackupHighlight() =
+    BackupManager.BackupHighlight(
+        chapterIdx = chapterIdx,
+        start = start,
+        end = end,
+        text = text,
+        note = note,
+        color = color,
+        createdAt = createdAt
+    )

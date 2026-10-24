@@ -252,4 +252,16 @@
     <string name="stats_goal_value">%1$d / %2$d 分钟</string>
     <string name="stats_streak">连续 %1$d 天 🔥</string>
     <string name="stats_goal_hint">拖动滑块调整每日阅读目标</string>
+    <string name="hl_copy">复制</string>
+    <string name="hl_note">笔记</string>
+    <string name="hl_note_title">划线与笔记</string>
+    <string name="hl_note_hint">写下想法（可选）</string>
+    <string name="hl_color">颜色</string>
+    <string name="hl_save">保存</string>
+    <string name="hl_delete">删除</string>
+    <string name="hl_edit">编辑</string>
+    <string name="hl_sheet_title">划线 · %1$d</string>
+    <string name="hl_export">导出</string>
+    <string name="hl_empty">暂无划线，长按正文选中文字即可添加</string>
+    <string name="btn_notes">笔记</string>
 </resources>

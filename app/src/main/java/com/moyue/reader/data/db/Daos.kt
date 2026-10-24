@@ -93,6 +93,39 @@ interface BookmarkDao {
 }
 
 @Dao
+interface HighlightDao {
+    @Query("SELECT * FROM highlights WHERE bookId = :bookId ORDER BY chapterIdx ASC, start ASC")
+    fun observeForBook(bookId: Long): Flow<List<HighlightEntity>>
+
+    @Query("SELECT * FROM highlights WHERE bookId = :bookId")
+    suspend fun listForBook(bookId: Long): List<HighlightEntity>
+
+    @Insert
+    suspend fun insert(h: HighlightEntity): Long
+
+    @Update
+    suspend fun update(h: HighlightEntity)
+
+    @Delete
+    suspend fun delete(h: HighlightEntity)
+
+    @Query("DELETE FROM highlights WHERE bookId = :bookId")
+    suspend fun deleteForBook(bookId: Long)
+}
+
+@Dao
+interface BookImageDao {
+    @Query("SELECT * FROM book_images WHERE bookId = :bookId AND chapterIdx = :chapterIdx ORDER BY charOffset ASC")
+    suspend fun listForChapter(bookId: Long, chapterIdx: Int): List<BookImageEntity>
+
+    @Insert
+    suspend fun insertAll(items: List<BookImageEntity>)
+
+    @Query("DELETE FROM book_images WHERE bookId = :bookId")
+    suspend fun deleteForBook(bookId: Long)
+}
+
+@Dao
 interface ReadStatDao {
     @Query("SELECT * FROM read_stats WHERE date = :date")
     suspend fun get(date: String): ReadStatEntity?

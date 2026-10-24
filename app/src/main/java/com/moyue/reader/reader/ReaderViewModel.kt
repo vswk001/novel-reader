@@ -14,8 +14,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
+import com.moyue.reader.data.db.BookImageEntity
 import com.moyue.reader.data.db.BookmarkEntity
 import com.moyue.reader.data.db.ChapterEntity
+import com.moyue.reader.data.db.HighlightEntity
 import com.moyue.reader.data.repo.BookRepository
 import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.data.repo.SettingsRepository
@@ -56,6 +58,9 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val loading: Boolean = true,
         val menuVisible: Boolean = false,
         val bookmarks: List<BookmarkEntity> = emptyList(),
+        val highlights: List<HighlightEntity> = emptyList(),
+        /** 当前章内联图片（EPUB） */
+        val images: List<BookImageEntity> = emptyList(),
         val searchResults: List<BookRepository.SearchHit>? = null,
         val searching: Boolean = false,
         /** 短暂浮层提示（加书签等操作反馈），2 秒自动消失 */
@@ -109,6 +114,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             }
         }
         viewModelScope.launch {
+            repo.observeHighlights(bookId).collect { hs ->
+                _ui.update { it.copy(highlights = hs) }
+            }
+        }
+        viewModelScope.launch {
             settings.prefs.collect { p ->
                 val old = _ui.value.prefs
                 _ui.update { it.copy(prefs = p) }
@@ -147,7 +157,8 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         chapterJob = viewModelScope.launch {
             _ui.update { it.copy(chapterIdx = safe, pages = emptyList(), pageIdx = 0, loading = true) }
             val text = repo.readChapterText(bookId, chapters[safe])
-            _ui.update { it.copy(chapterText = text) }
+            val images = repo.imagesForChapter(bookId, safe)
+            _ui.update { it.copy(chapterText = text, images = images) }
             val s = spec
             if (s != null) paginate(s) else _ui.update { it.copy(loading = false) }
         }
@@ -156,6 +167,21 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     fun applySpec(newSpec: LayoutSpec) {
         spec = newSpec
         if (_ui.value.chapters.isNotEmpty()) paginate(newSpec)
+    }
+
+    /**
+     * 分页用整章 spanned：与渲染共用 PageSpans.apply，
+     * ImageSpan 边界一致 → 含图片行的行高测量与渲染完全相同。
+     */
+    private fun spannedFor(s: LayoutSpec) = PageSpans.apply(
+        _ui.value.chapterText, 0,
+        _ui.value.highlights, null, _ui.value.images
+    ) { img ->
+        PageImageDrawable(
+            java.io.File(repo.imageDir(bookId), img.fileName),
+            img.srcW, img.srcH,
+            maxW = s.pageWidth, maxH = (s.pageHeight * 0.7f).toInt()
+        )
     }
 
     private fun paginate(s: LayoutSpec) {
@@ -170,7 +196,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             val engine = PaginationEngine(paint, s.pageWidth, s.pageHeight, s.lineSpacing)
             val cached = synchronized(pageCache) { pageCache[st.chapterIdx] }
                 ?.takeIf { it.first == s }?.second
-            val pages = cached ?: engine.paginate(text).also {
+            val pages = cached ?: engine.paginate(spannedFor(s)).also {
                 synchronized(pageCache) { pageCache[st.chapterIdx] = s to it }
             }
             // 偏移是全书绝对值，页表是章节内相对值：必须换算后再定位
@@ -301,12 +327,41 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val from = page.start.coerceIn(0, st.chapterText.length)
         val to = page.end.coerceIn(0, st.chapterText.length)
         val excerpt = st.chapterText.substring(from, to)
-            .replace('\n', ' ').trim().take(60)
+            .replace('\n', ' ')
+            .replace(PageSpans.IMG_CHAR, ' ')
+            .trim().take(60)
             .ifBlank { ch.title }
         viewModelScope.launch {
             repo.addBookmark(bookId, st.chapterIdx, offset, excerpt)
             showTransient(ctx.getString(R.string.bookmark_added))
         }
+    }
+
+    // ---- 划线高亮 ----
+
+    /** 新增高亮（去重：同章节同区间） */
+    fun addHighlight(start: Int, end: Int, color: Int, note: String = "") {
+        val st = _ui.value
+        if (end <= start) return
+        if (st.highmarksDupe(start, end)) return
+        val excerpt = st.chapterText.substring(start.coerceIn(0, st.chapterText.length), end.coerceIn(0, st.chapterText.length))
+            .replace(PageSpans.IMG_CHAR, ' ')
+            .replace('\n', ' ').trim()
+        if (excerpt.isBlank()) return
+        viewModelScope.launch {
+            repo.addHighlight(bookId, st.chapterIdx, start, end, excerpt.take(300), note, color)
+        }
+    }
+
+    private fun UiState.highmarksDupe(start: Int, end: Int): Boolean =
+        highlights.any { it.chapterIdx == chapterIdx && it.start == start && it.end == end }
+
+    fun updateHighlight(h: HighlightEntity, note: String, color: Int) {
+        viewModelScope.launch { repo.updateHighlight(h.copy(note = note, color = color)) }
+    }
+
+    fun deleteHighlight(h: HighlightEntity) {
+        viewModelScope.launch { repo.deleteHighlight(h) }
     }
 
     fun showTransient(message: String) {
@@ -421,6 +476,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         }
         val text = st.chapterText
             .substring(page.start.coerceIn(0, st.chapterText.length), page.end.coerceIn(0, st.chapterText.length))
+            .replace(PageSpans.IMG_CHAR, ' ')
             .trim()
         if (text.isEmpty()) {
             advanceTts()
