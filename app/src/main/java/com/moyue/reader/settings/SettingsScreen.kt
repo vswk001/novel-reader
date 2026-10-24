@@ -442,14 +442,13 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
             }
 
             // ---------- 检查更新 ----------
+            // 更新源由构建脚本注入（BuildConfig.UPDATE_FEED_URL），不提供运行时配置
             var checking by remember { mutableStateOf(false) }
             var updateResult by remember {
                 mutableStateOf<com.moyue.reader.data.update.UpdateChecker.ReleaseInfo?>(null)
             }
             var updateError by remember { mutableStateOf<String?>(null) }
             var updateLatest by remember { mutableStateOf(false) }
-            var feedInput by remember(prefs.updateFeedUrl) { mutableStateOf(prefs.updateFeedUrl) }
-            val defaultFeed = stringResource(R.string.default_update_feed)
             val releasePage = stringResource(R.string.default_release_page)
             val context2 = context
 
@@ -459,8 +458,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                 updateError = null
                 updateLatest = false
                 scope.launch {
-                    val url = feedInput.trim().ifEmpty { defaultFeed }
-                    com.moyue.reader.data.update.UpdateChecker.fetch(url)
+                    com.moyue.reader.data.update.UpdateChecker.fetch()
                         .onSuccess { info ->
                             if (com.moyue.reader.data.update.UpdateChecker.isNewer(
                                     info.tag, com.moyue.reader.BuildConfig.VERSION_NAME
@@ -482,36 +480,16 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
 
             SectionCard(stringResource(R.string.sec_update)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.update_current_fmt, com.moyue.reader.BuildConfig.VERSION_NAME))
-                        Text(
-                            if (feedInput.isBlank()) stringResource(R.string.update_feed_default)
-                            else stringResource(R.string.update_feed_custom),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        stringResource(R.string.update_current_fmt, com.moyue.reader.BuildConfig.VERSION_NAME),
+                        modifier = Modifier.weight(1f)
+                    )
                     Button(onClick = { checkUpdate() }, enabled = !checking) {
                         Text(
                             if (checking) stringResource(R.string.update_checking)
                             else stringResource(R.string.btn_check_update)
                         )
                     }
-                }
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = feedInput,
-                    onValueChange = { feedInput = it },
-                    placeholder = { Text(defaultFeed, maxLines = 1) },
-                    singleLine = true,
-                    supportingText = { Text(stringResource(R.string.update_feed_hint)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = {
-                    update { it.copy(updateFeedUrl = feedInput.trim()) }
-                }) {
-                    Text(stringResource(R.string.update_feed_save))
                 }
             }
 

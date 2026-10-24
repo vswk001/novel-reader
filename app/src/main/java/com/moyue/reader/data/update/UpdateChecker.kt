@@ -1,5 +1,6 @@
 package com.moyue.reader.data.update
 
+import com.moyue.reader.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -11,8 +12,8 @@ import java.net.URL
 
 /**
  * 检查更新：GET 更新源 JSON（兼容 GitHub Releases /latest 格式）。
- * 更新源地址不写死在代码里：默认值来自 strings.xml 资源，用户可在设置中覆盖。
- * 联网仅此一处用途。
+ * 更新源地址不写死在代码里：由构建脚本注入 BuildConfig.UPDATE_FEED_URL
+ * （发布时 -PupdateFeedUrl=... 或环境变量），联网仅此一处用途。
  */
 object UpdateChecker {
 
@@ -28,7 +29,8 @@ object UpdateChecker {
         val apkSizeBytes: Long?
     )
 
-    suspend fun fetch(feedUrl: String): Result<ReleaseInfo> = withContext(Dispatchers.IO) {
+    suspend fun fetch(feedUrl: String = BuildConfig.UPDATE_FEED_URL): Result<ReleaseInfo> =
+        withContext(Dispatchers.IO) {
         runCatching {
             val conn = URL(feedUrl).openConnection() as HttpURLConnection
             conn.connectTimeout = 10_000

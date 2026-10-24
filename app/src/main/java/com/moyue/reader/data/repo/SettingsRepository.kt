@@ -62,9 +62,7 @@ data class ReaderPrefs(
     /** 自动滚动速度 dp/s */
     val autoScrollSpeed: Int = 140,
     /** 每日阅读目标（分钟） */
-    val dailyGoalMin: Int = 30,
-    /** 自定义更新源 URL；空 = 使用内置默认源 */
-    val updateFeedUrl: String = ""
+    val dailyGoalMin: Int = 30
 )
 
 class SettingsRepository(private val context: Context) {
@@ -90,7 +88,6 @@ class SettingsRepository(private val context: Context) {
         val ttsRate = floatPreferencesKey("tts_rate")
         val autoScrollSpeed = intPreferencesKey("auto_scroll_speed")
         val dailyGoalMin = intPreferencesKey("daily_goal_min")
-        val updateFeedUrl = stringPreferencesKey("update_feed_url")
     }
 
     val prefs: Flow<ReaderPrefs> = context.dataStore.data.map { p ->
@@ -114,8 +111,7 @@ class SettingsRepository(private val context: Context) {
             bookshelfGrid = p[Keys.bookshelfGrid] ?: true,
             ttsRate = p[Keys.ttsRate] ?: 1.0f,
             autoScrollSpeed = p[Keys.autoScrollSpeed] ?: 140,
-            dailyGoalMin = p[Keys.dailyGoalMin] ?: 30,
-            updateFeedUrl = p[Keys.updateFeedUrl] ?: ""
+            dailyGoalMin = p[Keys.dailyGoalMin] ?: 30
         )
     }
 
@@ -145,7 +141,6 @@ class SettingsRepository(private val context: Context) {
             p[Keys.ttsRate] = new.ttsRate
             p[Keys.autoScrollSpeed] = new.autoScrollSpeed
             p[Keys.dailyGoalMin] = new.dailyGoalMin
-            p[Keys.updateFeedUrl] = new.updateFeedUrl
         }
     }
 

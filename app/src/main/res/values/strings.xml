@@ -264,7 +264,6 @@
     <string name="hl_export">Export</string>
     <string name="hl_empty">No highlights yet. Long-press text to select.</string>
     <string name="btn_notes">Notes</string>
-    <string name="default_update_feed">https://api.github.com/repos/vswk001/novel-reader/releases/latest</string>
     <string name="default_release_page">https://github.com/vswk001/novel-reader/releases</string>
     <string name="sec_update">Update</string>
     <string name="update_current_fmt">Current version v%1$s</string>
@@ -277,9 +276,5 @@
     <string name="update_open_page">Open release page</string>
     <string name="update_failed_title">Update check failed</string>
     <string name="update_failed_detail">%1$s
-Check your network, or set a custom update feed below. Private repositories cannot be checked anonymously.</string>
-    <string name="update_feed_default">Using the built-in update feed</string>
-    <string name="update_feed_custom">Using a custom update feed</string>
-    <string name="update_feed_hint">GitHub Releases /latest-compatible JSON endpoint. Leave empty to use the default.</string>
-    <string name="update_feed_save">Save feed</string>
+Check your network, or open the release page below. (GitHub API is anonymous-only for public repos.)</string>
 </resources>

@@ -8,6 +8,13 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// 检查更新源：发布构建时通过 -PupdateFeedUrl=... 或环境变量 UPDATE_FEED_URL 注入
+// （不写死在代码/资源中）；未提供时回退到内置默认。
+val updateFeedUrl: String =
+    (project.findProperty("updateFeedUrl") as String?)
+        ?: System.getenv("UPDATE_FEED_URL")
+        ?: "https://api.github.com/repos/vswk001/novel-reader/releases/latest"
+
 // 签名配置：根目录存在 keystore.properties 时启用（文件不入库）
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
@@ -22,8 +29,11 @@ android {
         applicationId = "com.moyue.reader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.9.4"
+        versionCode = 21
+        versionName = "1.9.5"
+
+        // 检查更新源（构建期注入，运行时经 BuildConfig.UPDATE_FEED_URL 读取）
+        buildConfigField("String", "UPDATE_FEED_URL", "\"$updateFeedUrl\"")
     }
 
     signingConfigs {

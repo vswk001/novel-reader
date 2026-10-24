@@ -97,6 +97,14 @@ cd novel-reader
 ./gradlew :app:assembleRelease        # 发布包（配置 keystore.properties 后自动签名）
 ```
 
+**检查更新源**（构建期注入，不写死在代码中）：
+
+```bash
+# 发布构建时通过 Gradle 参数或环境变量指定更新源（GitHub Releases /latest 兼容 JSON）
+./gradlew :app:assembleRelease -PupdateFeedUrl=https://api.github.com/repos/YOUR/REPO/releases/latest
+# 或 export UPDATE_FEED_URL=...
+```
+
 签名：在项目根目录放置 `keystore.properties`（已 gitignore）：
 
 ```properties
