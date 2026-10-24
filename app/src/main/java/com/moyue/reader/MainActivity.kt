@@ -1,11 +1,14 @@
 package com.moyue.reader
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.content.IntentCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -14,11 +17,12 @@ import com.moyue.reader.ui.AppNav
 import com.moyue.reader.ui.theme.MoyueTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        handleExternalIntent(intent)
 
         // 隐私模式：FLAG_SECURE 禁止截屏与最近任务预览，随设置实时生效
         lifecycleScope.launch {
@@ -40,6 +44,22 @@ class MainActivity : ComponentActivity() {
             MoyueTheme {
                 AppNav()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleExternalIntent(intent)
+    }
+
+    /** 系统「打开方式 / 分享到墨阅」：记录 Uri，书架页到达后导入普通书架 */
+    private fun handleExternalIntent(intent: Intent?) {
+        if (intent == null) return
+        when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data?.let { Graph.pendingImportUri = it }
+            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(
+                intent, Intent.EXTRA_STREAM, Uri::class.java
+            )?.let { Graph.pendingImportUri = it }
         }
     }
 

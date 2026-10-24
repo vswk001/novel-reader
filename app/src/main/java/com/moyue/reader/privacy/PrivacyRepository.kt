@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
@@ -25,6 +26,7 @@ class PrivacyRepository(private val context: Context) {
         val type = stringPreferencesKey("pwd_type")
         val hash = stringPreferencesKey("pwd_hash")
         val salt = stringPreferencesKey("pwd_salt")
+        val bio = booleanPreferencesKey("biometric_enabled")
     }
 
     suspend fun hasPassword(): Boolean =
@@ -50,7 +52,15 @@ class PrivacyRepository(private val context: Context) {
         return PasswordHasher.verify(secret, salt, storedHash)
     }
 
+    suspend fun bioEnabled(): Boolean =
+        context.privacyStore.data.map { it[K.bio] == true }.first()
+
+    suspend fun setBioEnabled(v: Boolean) {
+        context.privacyStore.edit { p -> p[K.bio] = v }
+    }
+
     suspend fun clearPassword() {
+        context.privacyStore.edit { p -> p.remove(K.bio) }
         context.privacyStore.edit { p ->
             p.remove(K.type)
             p.remove(K.salt)

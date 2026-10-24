@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +69,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import com.moyue.reader.R
 import com.moyue.reader.data.repo.ReadMode
 import com.moyue.reader.data.repo.ReaderThemeKind
+import com.moyue.reader.ui.common.ActionRow
+import com.moyue.reader.ui.common.MoyueDialog
 
 private enum class ReaderSheet { TOC, BOOKMARK, SEARCH }
 
@@ -85,6 +88,7 @@ fun ReaderMenuOverlay(
     onBack: () -> Unit
 ) {
     var sheet by remember { mutableStateOf<ReaderSheet?>(null) }
+    var showSleepTimer by remember { mutableStateOf(false) }
 
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
         // 顶栏
@@ -223,23 +227,38 @@ fun ReaderMenuOverlay(
                         }
                     }
 
-                    // ---- 章节进度 ----
+                    // ---- 章节进度（拖动时气泡预览章节标题） ----
                     val chapterCount = ui.chapters.size
                     if (chapterCount > 1) {
                         MenuDivider(palette)
                         var sliderValue by remember(ui.chapterIdx) {
                             mutableStateOf(ui.chapterIdx.toFloat())
                         }
+                        var dragging by remember { mutableStateOf(false) }
+                        AnimatedVisibility(visible = dragging, enter = fadeIn(), exit = fadeOut()) {
+                            Text(
+                                ui.chapters.getOrNull(
+                                    sliderValue.toInt().coerceIn(0, chapterCount - 1)
+                                )?.title.orEmpty(),
+                                color = palette.menuText,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "${ui.chapterIdx + 1}/$chapterCount",
+                                if (dragging) "${sliderValue.toInt() + 1}/$chapterCount"
+                                else "${ui.chapterIdx + 1}/$chapterCount",
                                 color = palette.secondary,
                                 fontSize = 12.sp
                             )
                             Slider(
                                 value = sliderValue,
-                                onValueChange = { sliderValue = it },
+                                onValueChange = { sliderValue = it; dragging = true },
                                 onValueChangeFinished = {
+                                    dragging = false
                                     vm.jumpToChapter(
                                         sliderValue.toInt().coerceIn(0, chapterCount - 1)
                                     )
@@ -315,7 +334,67 @@ fun ReaderMenuOverlay(
                             vm.setAutoScroll(true)
                             vm.setMenuVisible(false)
                         }
+                        if (ui.ttsRunning) {
+                            val label = when {
+                                ui.ttsSleepDeadline != null -> {
+                                    val min = ((ui.ttsSleepDeadline - System.currentTimeMillis()) / 60_000L)
+                                        .coerceAtLeast(0L)
+                                    "$min′"
+                                }
+                                ui.ttsStopAfterChapter -> stringResource(R.string.tts_timer_chapter_short)
+                                else -> stringResource(R.string.tts_timer)
+                            }
+                            MenuIconButton(label, Icons.Filled.Timer, palette) {
+                                showSleepTimer = true
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+
+    // ---- 听书定时 ----
+    if (showSleepTimer) {
+        MoyueDialog(
+            onDismissRequest = { showSleepTimer = false },
+            title = stringResource(R.string.tts_timer_title)
+        ) {
+            ActionRow(
+                Icons.Filled.Timer,
+                stringResource(R.string.tts_timer_min_fmt, 15),
+                stringResource(R.string.tts_timer_min_sub)
+            ) {
+                vm.setTtsSleep(15); showSleepTimer = false
+            }
+            ActionRow(
+                Icons.Filled.Timer,
+                stringResource(R.string.tts_timer_min_fmt, 30),
+                stringResource(R.string.tts_timer_min_sub)
+            ) {
+                vm.setTtsSleep(30); showSleepTimer = false
+            }
+            ActionRow(
+                Icons.Filled.Timer,
+                stringResource(R.string.tts_timer_min_fmt, 60),
+                stringResource(R.string.tts_timer_min_sub)
+            ) {
+                vm.setTtsSleep(60); showSleepTimer = false
+            }
+            ActionRow(
+                Icons.Filled.PlayCircle,
+                stringResource(R.string.tts_timer_chapter),
+                stringResource(R.string.tts_timer_chapter_sub)
+            ) {
+                vm.setTtsStopAfterChapter(true); showSleepTimer = false
+            }
+            if (ui.ttsSleepDeadline != null || ui.ttsStopAfterChapter) {
+                ActionRow(
+                    Icons.Filled.StopCircle,
+                    stringResource(R.string.tts_timer_off),
+                    null
+                ) {
+                    vm.setTtsSleep(null); showSleepTimer = false
                 }
             }
         }

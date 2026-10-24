@@ -17,7 +17,7 @@ fun AppNav() {
             val space = entry.arguments?.getString("space")?.toIntOrNull() ?: 0
             BookshelfScreen(
                 onOpenBook = { id -> nav.navigate("reader/$id") },
-                onOpenSettings = { nav.navigate("settings") },
+                onOpenSettings = { nav.navigate("settings/$space") },
                 onOpenStats = { s -> nav.navigate("stats/$s") },
                 onEnterPrivate = { nav.navigate("bookshelf/1") },
                 onBack = if (space == 1) ({ nav.popBackStack() }) else null
@@ -26,8 +26,9 @@ fun AppNav() {
         composable("reader/{bookId}") {
             ReaderScreen(onBack = { nav.popBackStack() })
         }
-        composable("settings") {
-            SettingsScreen(onBack = { nav.popBackStack() })
+        composable("settings/{space}") { entry ->
+            val space = entry.arguments?.getString("space")?.toIntOrNull() ?: 0
+            SettingsScreen(space = space, onBack = { nav.popBackStack() })
         }
         composable("stats/{space}") { entry ->
             val space = entry.arguments?.getString("space")?.toIntOrNull() ?: 0

@@ -139,6 +139,14 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
         }
     }
 
+    /** 移入回收站（7 天内可在设置中恢复） */
+    fun trashBook(book: BookEntity) {
+        viewModelScope.launch {
+            repo.moveToTrash(book.id)
+            _ui.update { it.copy(message = ctx.getString(R.string.msg_trash_moved)) }
+        }
+    }
+
     /** 在普通书架与隐私空间之间转移 */
     fun moveBook(book: BookEntity, toSpace: Int) {
         viewModelScope.launch {

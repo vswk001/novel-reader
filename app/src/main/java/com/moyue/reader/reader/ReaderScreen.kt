@@ -33,10 +33,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -138,7 +140,7 @@ fun ReaderScreen(onBack: () -> Unit) {
         spec?.let { vm.applySpec(it) }
     }
 
-    val scrollState = rememberScrollState()
+    val scrollState = rememberLazyListState()
 
     // ---------- 亮度手势：左半屏上下拖动调节（松手持久化，拖动中实时生效） ----------
     var brightnessDragActive by remember { mutableStateOf(false) }
@@ -572,12 +574,12 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 }
 
-/** 上下滚动阅读模式：页面纵向连续堆叠，章节首尾提供上/下一章入口；支持自动滚动 */
+/** 上下滚动阅读模式：LazyColumn 懒构建页面布局（大章节不再全量排版），章节首尾提供上/下一章入口 */
 @Composable
 private fun ScrollReaderContent(
     ui: ReaderViewModel.UiState,
     vm: ReaderViewModel,
-    scrollState: androidx.compose.foundation.ScrollState,
+    scrollState: LazyListState,
     pageHeightPx: Int,
     autoSpeedPx: Float,
     textSizePx: Float,
@@ -589,6 +591,8 @@ private fun ScrollReaderContent(
     hasPrev: Boolean,
     hasNext: Boolean
 ) {
+    val headerCount = if (hasPrev) 1 else 0
+
     // 自动滚动：按帧推进，触底自动进入下一章；任意触摸停止（见 ReaderScreen 根手势）
     LaunchedEffect(ui.autoScroll, ui.pages, pageHeightPx) {
         if (!ui.autoScroll || pageHeightPx <= 0) return@LaunchedEffect
@@ -598,7 +602,7 @@ private fun ScrollReaderContent(
             if (lastNs != 0L) {
                 val dt = (now - lastNs) / 1_000_000_000f
                 scrollState.scrollBy(autoSpeedPx * dt)
-                if (scrollState.value >= scrollState.maxValue - 4) {
+                if (!scrollState.canScrollForward) {
                     if (hasNext) vm.nextChapter() else vm.setAutoScroll(false)
                     break
                 }
@@ -607,21 +611,20 @@ private fun ScrollReaderContent(
         }
     }
 
-    // 进度跟踪：当前页 = 视口中间可见的页
-    LaunchedEffect(scrollState, pageHeightPx) {
-        snapshotFlow { scrollState.value }.collect { v ->
-            if (pageHeightPx > 0 && ui.pages.isNotEmpty()) {
-                val idx = (v + pageHeightPx / 2) / pageHeightPx
-                vm.onPageSettled(idx.coerceIn(0, ui.pages.size - 1))
+    // 进度跟踪：当前页 = 视口顶部可见的页
+    LaunchedEffect(scrollState, ui.pages.size) {
+        snapshotFlow { scrollState.firstVisibleItemIndex }.collect { first ->
+            if (ui.pages.isNotEmpty()) {
+                vm.onPageSettled((first - headerCount).coerceIn(0, ui.pages.size - 1))
             }
         }
     }
-    // 进度恢复：分页完成或跳转后滚动到目标页（与当前差异大于半页才跳）
+    // 进度恢复：分页完成或跳转后滚动到目标页
     LaunchedEffect(ui.pages, ui.pageIdx, pageHeightPx) {
         if (ui.pages.isNotEmpty() && pageHeightPx > 0 && !scrollState.isScrollInProgress) {
-            val target = ui.pageIdx * pageHeightPx
-            if (abs(scrollState.value - target) > pageHeightPx / 2) {
-                scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
+            val target = headerCount + ui.pageIdx
+            if (scrollState.firstVisibleItemIndex != target) {
+                scrollState.scrollToItem(target)
             }
         }
     }
@@ -629,40 +632,47 @@ private fun ScrollReaderContent(
     val density = LocalDensity.current
     val pageHeightDp = with(density) { pageHeightPx.toDp() }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
+    LazyColumn(
+        state = scrollState,
+        modifier = Modifier.fillMaxSize()
     ) {
         if (hasPrev) {
-            ScrollChapterButton(stringResource(R.string.btn_prev_chapter), accentColor) { vm.prevChapter() }
+            item(key = "prev", contentType = "chapterBtn") {
+                ScrollChapterButton(stringResource(R.string.btn_prev_chapter), accentColor) { vm.prevChapter() }
+            }
         }
-        ui.pages.forEachIndexed { idx, page ->
-            StaticPage(
-                text = ui.chapterText,
-                page = page,
-                textSizePx = textSizePx,
-                serif = serif,
-                lineSpacing = lineSpacing,
-                widthPx = widthPx,
-                textColor = textColor,
-                modifier = Modifier
+        items(ui.pages.size, key = { it }, contentType = { "page" }) { idx ->
+            Box(
+                Modifier
                     .fillMaxWidth()
                     .height(pageHeightDp)
-            )
+            ) {
+                StaticPage(
+                    text = ui.chapterText,
+                    page = ui.pages[idx],
+                    textSizePx = textSizePx,
+                    serif = serif,
+                    lineSpacing = lineSpacing,
+                    widthPx = widthPx,
+                    textColor = textColor,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
-        if (hasNext) {
-            ScrollChapterButton(stringResource(R.string.btn_next_chapter), accentColor) { vm.nextChapter() }
-        } else {
-            Text(
-                stringResource(R.string.txt_the_end),
-                color = accentColor,
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
+        item(key = "tail", contentType = "chapterBtn") {
+            if (hasNext) {
+                ScrollChapterButton(stringResource(R.string.btn_next_chapter), accentColor) { vm.nextChapter() }
+            } else {
+                Text(
+                    stringResource(R.string.txt_the_end),
+                    color = accentColor,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
     }
 }

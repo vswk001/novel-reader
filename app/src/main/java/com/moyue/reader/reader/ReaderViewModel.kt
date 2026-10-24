@@ -63,7 +63,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         /** TTS 朗读中 */
         val ttsRunning: Boolean = false,
         /** 自动滚动中（滚动模式） */
-        val autoScroll: Boolean = false
+        val autoScroll: Boolean = false,
+        /** 听书定时：到点时间戳（null=未启用） */
+        val ttsSleepDeadline: Long? = null,
+        /** 听书定时：本章读完即停 */
+        val ttsStopAfterChapter: Boolean = false
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -77,6 +81,14 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     private var layoutJob: Job? = null
     private var chapterJob: Job? = null
     private var chaptersLoaded = false
+
+    /** 分页结果 LRU 缓存（章节 → 排版参数 + 页表），翻章往返免重算 */
+    private val pageCache = object : LinkedHashMap<Int, Pair<LayoutSpec, List<PaginationEngine.Page>>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Pair<LayoutSpec, List<PaginationEngine.Page>>>) = size > 8
+    }
+
+    /** 进度写库防抖：滚动模式下 onPageSettled 高频触发，停顿后再落库 */
+    private var persistJob: Job? = null
 
     // ---- 阅读时长 ----
     private var readStartAt = 0L
@@ -156,7 +168,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
                 typeface = if (s.serif) Typeface.SERIF else Typeface.DEFAULT
             }
             val engine = PaginationEngine(paint, s.pageWidth, s.pageHeight, s.lineSpacing)
-            val pages = engine.paginate(text)
+            val cached = synchronized(pageCache) { pageCache[st.chapterIdx] }
+                ?.takeIf { it.first == s }?.second
+            val pages = cached ?: engine.paginate(text).also {
+                synchronized(pageCache) { pageCache[st.chapterIdx] = s to it }
+            }
             // 偏移是全书绝对值，页表是章节内相对值：必须换算后再定位
             val chapterStart = st.chapters.getOrNull(st.chapterIdx)?.charStart ?: 0
             val absOffset = pendingOffset ?: currentCharOffset()
@@ -176,10 +192,19 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val st = _ui.value
         if (st.pages.isEmpty()) return
         val safe = page.coerceIn(0, st.pages.size - 1)
-        if (safe != st.pageIdx) {
-            _ui.update { it.copy(pageIdx = safe) }
+        // 页码未变不写库（滚动模式每帧都会上报当前页）
+        if (safe == st.pageIdx) return
+        _ui.update { it.copy(pageIdx = safe) }
+        schedulePersist()
+    }
+
+    /** 停顿 400ms 后写一次进度；高频翻页/滚动时自动合并 */
+    private fun schedulePersist() {
+        persistJob?.cancel()
+        persistJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(400)
+            persistProgress()
         }
-        persistProgress()
     }
 
     fun currentCharOffset(): Int {
@@ -197,6 +222,15 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         viewModelScope.launch {
             repo.saveProgress(book.id, st.chapterIdx, ch.charStart + page.start)
         }
+    }
+
+    /** 立即落库当前进度（离开页面/被销毁时兜底） */
+    private fun flushProgressNow(scope: kotlinx.coroutines.CoroutineScope) {
+        val st = _ui.value
+        val book = st.book ?: return
+        val ch = st.chapters.getOrNull(st.chapterIdx) ?: return
+        val page = st.pages.getOrNull(st.pageIdx) ?: return
+        scope.launch { repo.saveProgress(book.id, st.chapterIdx, ch.charStart + page.start) }
     }
 
     fun prevChapter() {
@@ -402,6 +436,8 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         if (st.pageIdx < st.pages.size - 1) {
             _ui.update { it.copy(pageIdx = st.pageIdx + 1) } // UI 同步滚动 Pager
             speakCurrentPage()
+        } else if (st.ttsStopAfterChapter) {
+            stopTts(ctx.getString(R.string.tts_timer_chapter_done))
         } else if (st.chapterIdx < st.chapters.size - 1) {
             ttsPending = true
             nextChapter()
@@ -413,9 +449,39 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     private fun stopTts(message: String? = null) {
         tts?.stop()
         abandonAudioFocus()
-        _ui.update { it.copy(ttsRunning = false) }
+        ttsSleepJob?.cancel()
+        ttsSleepJob = null
+        _ui.update { it.copy(ttsRunning = false, ttsSleepDeadline = null, ttsStopAfterChapter = false) }
         ttsPending = false
         if (message != null) showTransient(message)
+    }
+
+    // ---- 听书定时 ----
+
+    private var ttsSleepJob: Job? = null
+
+    /** 分钟后停止朗读；null 取消定时 */
+    fun setTtsSleep(minutes: Int?) {
+        ttsSleepJob?.cancel()
+        ttsSleepJob = null
+        _ui.update { it.copy(ttsStopAfterChapter = false) }
+        if (minutes == null) {
+            _ui.update { it.copy(ttsSleepDeadline = null) }
+            return
+        }
+        val deadline = System.currentTimeMillis() + minutes * 60_000L
+        _ui.update { it.copy(ttsSleepDeadline = deadline) }
+        ttsSleepJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(minutes * 60_000L)
+            stopTts(ctx.getString(R.string.tts_timer_done))
+        }
+    }
+
+    /** 本章读完即停 */
+    fun setTtsStopAfterChapter(on: Boolean) {
+        ttsSleepJob?.cancel()
+        ttsSleepJob = null
+        _ui.update { it.copy(ttsStopAfterChapter = on, ttsSleepDeadline = null) }
     }
 
     private fun requestAudioFocus() {
@@ -465,6 +531,8 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     }
 
     fun onReaderHidden() {
+        persistJob?.cancel()
+        persistProgress()
         if (readStartAt <= 0L) return
         val delta = System.currentTimeMillis() - readStartAt
         readStartAt = 0L
@@ -474,6 +542,8 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     }
 
     override fun onCleared() {
+        persistJob?.cancel()
+        flushProgressNow(kotlinx.coroutines.GlobalScope)
         val delta = if (readStartAt > 0L) System.currentTimeMillis() - readStartAt else 0L
         readStartAt = 0L
         if (delta > 0L) {

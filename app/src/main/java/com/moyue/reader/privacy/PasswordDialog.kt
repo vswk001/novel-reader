@@ -1,5 +1,7 @@
 package com.moyue.reader.privacy
 
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,16 +22,31 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import android.content.Context
+import android.content.ContextWrapper
 import com.moyue.reader.R
 import com.moyue.reader.di.Graph
 import com.moyue.reader.ui.common.MoyueDialog
 import kotlinx.coroutines.launch
 
 enum class PasswordDialogKind { SETUP, UNLOCK, CHANGE }
+
+/** BiometricPrompt 需要宿主 FragmentActivity */
+private fun Context.findFragmentActivity(): FragmentActivity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is FragmentActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
 
 private const val MIN_PIN = 4
 private const val MAX_PIN = 8
@@ -57,6 +74,7 @@ fun PasswordDialog(
 ) {
     val repo = Graph.privacyRepository
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var stage by remember { mutableStateOf<Stage>(Stage.Loading) }
     var pin by remember { mutableStateOf("") }
@@ -78,6 +96,33 @@ fun PasswordDialog(
                 if (type != null) Stage.VerifyOld(type) else Stage.ChooseType
             PasswordDialogKind.SETUP -> Stage.ChooseType
         }
+    }
+
+    // 解锁隐私空间：已开启指纹且设备支持 → 自动弹出系统生物识别（取消则回退手动输入）
+    LaunchedEffect(kind, stage) {
+        if (kind != PasswordDialogKind.UNLOCK || stage !is Stage.VerifyOld) return@LaunchedEffect
+        if (!repo.bioEnabled()) return@LaunchedEffect
+        val activity = context.findFragmentActivity() ?: return@LaunchedEffect
+        val manager = BiometricManager.from(context)
+        if (manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            != BiometricManager.BIOMETRIC_SUCCESS
+        ) return@LaunchedEffect
+        val prompt = BiometricPrompt(
+            activity,
+            ContextCompat.getMainExecutor(activity),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    onDone()
+                }
+            }
+        )
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle(context.getString(R.string.biometric_title))
+                .setSubtitle(context.getString(R.string.biometric_subtitle))
+                .setNegativeButtonText(context.getString(R.string.btn_cancel))
+                .build()
+        )
     }
 
     fun submitSecret(secret: String, type: String) {

@@ -23,7 +23,9 @@ data class BookEntity(
     /** 封面渐变色调 0..360 */
     val coverHue: Int = 0,
     /** 所属空间：0=普通书架，1=隐私空间（完全独立管理） */
-    val space: Int = 0
+    val space: Int = 0,
+    /** 回收站：0=正常在架；>0=移入回收站的时间戳（7 天后自动清理） */
+    val deletedAt: Long = 0L
 )
 
 @Entity(tableName = "chapters", primaryKeys = ["bookId", "idx"])

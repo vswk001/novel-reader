@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -38,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moyue.reader.R
 import com.moyue.reader.data.backup.BackupManager
+import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.repo.ClickZone
 import com.moyue.reader.data.repo.PageAnim
 import com.moyue.reader.data.repo.ReadMode
@@ -59,11 +63,13 @@ import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.data.repo.ReaderThemeKind
 import com.moyue.reader.di.Graph
 import com.moyue.reader.reader.ReaderThemes
+import com.moyue.reader.ui.common.BookCover
+import com.moyue.reader.ui.common.fmtDateTime
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
     val prefs by Graph.settingsRepository.prefs
         .collectAsStateWithLifecycle(initialValue = ReaderPrefs())
     val scope = rememberCoroutineScope()
@@ -332,6 +338,90 @@ fun SettingsScreen(onBack: () -> Unit) {
                         importLauncher.launch(arrayOf("application/json"))
                     }) {
                         Text(stringResource(R.string.btn_import_backup))
+                    }
+                }
+            }
+
+            // ---------- 回收站 ----------
+            var trash by remember { mutableStateOf<List<BookEntity>>(emptyList()) }
+            LaunchedEffect(space, message) {
+                trash = Graph.bookRepository.listTrashed(space)
+            }
+            SectionCard(stringResource(R.string.trash_title)) {
+                Text(
+                    stringResource(R.string.trash_hint),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                if (trash.isEmpty()) {
+                    Text(
+                        stringResource(R.string.trash_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    trash.forEach { b ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BookCover(
+                                title = b.title,
+                                hue = b.coverHue,
+                                fontSize = 10.sp,
+                                maxChars = 2,
+                                modifier = Modifier.size(width = 30.dp, height = 42.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(b.title, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    stringResource(R.string.trash_deleted_at, fmtDateTime(b.deletedAt)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = {
+                                scope.launch {
+                                    Graph.bookRepository.restoreFromTrash(b.id)
+                                    message = context.getString(R.string.msg_trash_restored, b.title)
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Filled.RestoreFromTrash,
+                                    contentDescription = stringResource(R.string.trash_restore),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            IconButton(onClick = {
+                                scope.launch {
+                                    Graph.bookRepository.deleteBookById(b.id, deleteFile = true)
+                                    message = context.getString(R.string.msg_deleted, b.title)
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.trash_delete_forever),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            Graph.bookRepository.emptyTrash(space)
+                            message = context.getString(R.string.trash_emptied)
+                        }
+                    }) {
+                        Text(
+                            stringResource(R.string.trash_empty_all),
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

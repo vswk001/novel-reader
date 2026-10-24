@@ -159,6 +159,25 @@ class BookRepository(
 
     suspend fun setPinned(bookId: Long, pinned: Boolean) = bookDao.setPinned(bookId, pinned)
 
+    // ---- 回收站 ----
+
+    suspend fun moveToTrash(bookId: Long) = bookDao.setDeletedAt(bookId, System.currentTimeMillis())
+
+    suspend fun restoreFromTrash(bookId: Long) = bookDao.setDeletedAt(bookId, 0L)
+
+    suspend fun listTrashed(space: Int): List<BookEntity> = bookDao.listTrash(space)
+
+    /** 清空某空间回收站（连文件一起删） */
+    suspend fun emptyTrash(space: Int) {
+        for (b in bookDao.listTrash(space)) deleteBookById(b.id, deleteFile = true)
+    }
+
+    /** 启动时清理：删除超过 [keepMillis] 的回收站书籍 */
+    suspend fun purgeExpiredTrash(keepMillis: Long = 7L * 24 * 3600 * 1000) {
+        val deadline = System.currentTimeMillis() - keepMillis
+        for (b in bookDao.listExpired(deadline)) deleteBookById(b.id, deleteFile = true)
+    }
+
     suspend fun addReadTime(bookId: Long, deltaMillis: Long) {
         if (deltaMillis <= 0) return
         bookDao.addReadTime(bookId, deltaMillis)
@@ -170,6 +189,23 @@ class BookRepository(
     suspend fun readTimeTotalMillis(): Long = statDao.totalMillis()
 
     suspend fun readStatToday(): Long = statDao.get(today())?.millis ?: 0L
+
+    /** 连续阅读天数：从今天（今天没读则从昨天）往回数，每天阅读 >= 1 分钟即算 */
+    suspend fun streakDays(): Int = withContext(Dispatchers.Default) {
+        val active = statDao.getAllOnce().filter { it.millis >= 60_000L }
+            .map { it.date }.toHashSet()
+        if (active.isEmpty()) return@withContext 0
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = java.util.Calendar.getInstance()
+        // 今天尚未达标时从昨天起算（连续记录不因当天还没读而断）
+        if (today() !in active) cal.add(java.util.Calendar.DATE, -1)
+        var streak = 0
+        while (fmt.format(cal.time) in active) {
+            streak++
+            cal.add(java.util.Calendar.DATE, -1)
+        }
+        streak
+    }
 
     suspend fun addBookmark(bookId: Long, chapterIdx: Int, charOffset: Int, excerpt: String): Long =
         bookmarkDao.insert(
@@ -197,10 +233,12 @@ class BookRepository(
         }
     }
 
-    /** 清空某个空间的全部书籍（忘记密码时只清隐私空间、保留普通书架） */
+    /** 清空某个空间的全部书籍（忘记密码时只清隐私空间、保留普通书架）；含回收站 */
     suspend fun deleteAllInSpace(space: Int, deleteFile: Boolean) {
-        val books = bookDao.getAllOnce(space)
-        for (b in books) {
+        for (b in bookDao.getAllOnce(space)) {
+            deleteBookById(b.id, deleteFile)
+        }
+        for (b in bookDao.listTrash(space)) {
             deleteBookById(b.id, deleteFile)
         }
     }

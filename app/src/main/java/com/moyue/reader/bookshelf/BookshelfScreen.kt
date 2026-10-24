@@ -125,6 +125,10 @@ fun BookshelfScreen(
     var actionBook by remember { mutableStateOf<BookEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<BookEntity?>(null) }
     var pwdKind by remember { mutableStateOf<PasswordDialogKind?>(null) }
+    var bioChecked by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        bioChecked = Graph.privacyRepository.bioEnabled()
+    }
 
     val pickFiles = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -133,6 +137,16 @@ fun BookshelfScreen(
     val pickTree = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let { vm.scanFolder(it) } }
+
+    // 系统「打开方式/分享」带入的文件：导入到普通书架（仅普通书架路由消费）
+    androidx.compose.runtime.LaunchedEffect(space) {
+        if (space == 0) {
+            Graph.pendingImportUri?.let { uri ->
+                Graph.pendingImportUri = null
+                vm.importUris(listOf(uri))
+            }
+        }
+    }
 
     /** 下拉过半屏松开 → 进入隐私空间（未设密码则先引导设置） */
     fun attemptEnterPrivate() {
@@ -194,6 +208,22 @@ fun BookshelfScreen(
                             expanded = showPrivateMenu,
                             onDismissRequest = { showPrivateMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (bioChecked) stringResource(R.string.menu_biometric) + " ✓"
+                                        else stringResource(R.string.menu_biometric)
+                                    )
+                                },
+                                onClick = {
+                                    showPrivateMenu = false
+                                    scope.launch {
+                                        val nv = !bioChecked
+                                        Graph.privacyRepository.setBioEnabled(nv)
+                                        bioChecked = nv
+                                    }
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_change_password)) },
                                 onClick = {
@@ -726,25 +756,25 @@ fun BookshelfScreen(
         }
     }
 
-    // 删除确认
+    // 删除确认：默认移入回收站，可选彻底删除
     deleteTarget?.let { book ->
         MoyueDialog(
             onDismissRequest = { deleteTarget = null },
             title = stringResource(R.string.delete_title, book.title),
             subtitle = stringResource(R.string.delete_subtitle),
-            confirmText = stringResource(R.string.delete_confirm),
+            confirmText = stringResource(R.string.trash_to_bin),
             onConfirm = {
-                vm.deleteBook(book, deleteFile = true)
+                vm.trashBook(book)
                 deleteTarget = null
-            },
-            confirmDestructive = true
+            }
         ) {
             ActionRow(
-                Icons.Filled.DriveFileMove,
-                stringResource(R.string.delete_keep),
-                stringResource(R.string.delete_keep_sub)
+                Icons.Filled.Delete,
+                stringResource(R.string.delete_forever),
+                stringResource(R.string.delete_forever_sub),
+                tint = MaterialTheme.colorScheme.error
             ) {
-                vm.deleteBook(book, deleteFile = false)
+                vm.deleteBook(book, deleteFile = true)
                 deleteTarget = null
             }
         }

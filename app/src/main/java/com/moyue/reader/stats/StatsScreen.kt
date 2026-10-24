@@ -17,8 +17,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -32,12 +34,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
+import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.di.Graph
 import com.moyue.reader.ui.common.BookCover
 import com.moyue.reader.ui.common.fmtDuration
 import com.moyue.reader.ui.common.fmtSize
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,15 +50,19 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
     data class StatsData(
         val todayMillis: Long = 0,
         val totalMillis: Long = 0,
+        val streak: Int = 0,
         val books: List<BookEntity> = emptyList()
     )
 
     val context = LocalContext.current
+    val prefs by Graph.settingsRepository.prefs
+        .collectAsStateWithLifecycle(initialValue = ReaderPrefs())
     val stats by produceState(initialValue = StatsData(), space) {
         val repo = Graph.bookRepository
         value = StatsData(
             todayMillis = repo.readStatToday(),
             totalMillis = repo.readTimeTotalMillis(),
+            streak = repo.streakDays(),
             books = repo.booksOnce(space).sortedByDescending { it.readTimeMillis }.take(20)
         )
     }
@@ -106,6 +115,61 @@ fun StatsScreen(space: Int = 0, onBack: () -> Unit) {
                     }
                 }
             }
+
+            // 今日目标 + 连续天数
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    val scope = androidx.compose.runtime.rememberCoroutineScope()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.stats_goal),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.stats_goal_value,
+                                    (stats.todayMillis / 60_000L).toInt(), prefs.dailyGoalMin
+                                ) + " · " + fmtDuration(context, stats.todayMillis),
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                        }
+                        Text(
+                            stringResource(R.string.stats_streak, stats.streak),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (stats.streak > 0) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = {
+                            if (prefs.dailyGoalMin <= 0) 0f
+                            else (stats.todayMillis / (prefs.dailyGoalMin * 60_000f))
+                                .coerceIn(0f, 1f)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.stats_goal_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Slider(
+                        value = prefs.dailyGoalMin.toFloat(),
+                        onValueChange = { v ->
+                            scope.launch {
+                                Graph.settingsRepository.update {
+                                    it.copy(dailyGoalMin = (v / 5).toInt() * 5)
+                                }
+                            }
+                        },
+                        valueRange = 10f..180f
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
 
             Text(
                 stringResource(R.string.stats_rank),

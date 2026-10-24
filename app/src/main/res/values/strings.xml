@@ -58,9 +58,9 @@
     <string name="action_unpin">Unpin</string>
     <string name="action_pin_sub">Pinned books always appear first</string>
     <string name="action_remove">Remove / Delete</string>
-    <string name="action_remove_sub">Choose whether to keep or delete the in-app copy</string>
+    <string name="action_remove_sub">Move to the recycle bin or delete forever</string>
     <string name="delete_title">Delete “%1$s”</string>
-    <string name="delete_subtitle">Removing from the shelf keeps the in-app copy; deleting also removes it. This cannot be undone.</string>
+    <string name="delete_subtitle">Recycle bin items can be restored for 7 days; deleting forever also removes the in-app file and cannot be undone.</string>
     <string name="delete_confirm">Delete (with file)</string>
     <string name="delete_keep">Remove only</string>
     <string name="delete_keep_sub">Keep the in-app copy for later re-import</string>
@@ -189,7 +189,7 @@
     <string name="msg_restore_ok">Restore finished: matched %1$d books (files must be on this device), merged progress of %2$d</string>
     <string name="msg_restore_fail">Restore failed: %1$s</string>
     <string name="sec_about">About</string>
-    <string name="about_text">MoYue v1.7.0 · Offline novel reader\nNo network permission, no ads, no telemetry</string>
+    <string name="about_text">MoYue v1.8.0 · Offline novel reader\nNo network permission, no ads, no telemetry</string>
 
     <!-- Stats -->
     <string name="stats_title">Reading stats</string>
@@ -222,4 +222,34 @@
     <string name="err_epub_container_parse">Failed to parse EPUB container.xml</string>
     <string name="err_epub_opf">EPUB is missing its OPF file: %1$s</string>
     <string name="err_epub_no_content">No readable content found in this EPUB</string>
+    <string name="tts_timer">Timer</string>
+    <string name="tts_timer_title">Sleep timer</string>
+    <string name="tts_timer_min_fmt">Stop after %1$d min</string>
+    <string name="tts_timer_min_sub">Reading stops automatically</string>
+    <string name="tts_timer_chapter">Stop after this chapter</string>
+    <string name="tts_timer_chapter_sub">Stops when the current chapter ends</string>
+    <string name="tts_timer_chapter_short">Chap</string>
+    <string name="tts_timer_off">Cancel timer</string>
+    <string name="tts_timer_done">Timer finished, reading stopped</string>
+    <string name="tts_timer_chapter_done">Chapter finished, reading stopped</string>
+    <string name="biometric_title">Unlock private space</string>
+    <string name="biometric_subtitle">Use fingerprint or face to enter</string>
+    <string name="menu_biometric">Fingerprint unlock</string>
+    <string name="trash_title">Recycle bin</string>
+    <string name="trash_hint">Items are kept for 7 days, then deleted permanently.</string>
+    <string name="trash_empty">The recycle bin is empty</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_delete_forever">Delete forever</string>
+    <string name="trash_empty_all">Empty recycle bin</string>
+    <string name="trash_deleted_at">Deleted %1$s</string>
+    <string name="trash_emptied">Recycle bin emptied</string>
+    <string name="msg_trash_moved">Moved to recycle bin (recover in Settings for 7 days)</string>
+    <string name="msg_trash_restored">Restored “%1$s”</string>
+    <string name="trash_to_bin">Move to recycle bin</string>
+    <string name="delete_forever">Delete forever (with file)</string>
+    <string name="delete_forever_sub">Immediately removes the in-app copy; cannot be undone</string>
+    <string name="stats_goal">Daily goal</string>
+    <string name="stats_goal_value">%1$d / %2$d min</string>
+    <string name="stats_streak">%1$d-day streak 🔥</string>
+    <string name="stats_goal_hint">Drag the slider to adjust your daily goal</string>
 </resources>

@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         BookmarkEntity::class,
         ReadStatEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,9 +31,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v2→v3：书籍增加 deletedAt 字段（回收站，0=正常，>0=删除时间戳） */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE books ADD COLUMN deletedAt INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "moyue.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

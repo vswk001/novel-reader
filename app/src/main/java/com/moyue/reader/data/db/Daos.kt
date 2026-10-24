@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BookDao {
-    @Query("SELECT * FROM books WHERE space = :space ORDER BY pinned DESC, lastReadAt DESC")
+    @Query("SELECT * FROM books WHERE space = :space AND deletedAt = 0 ORDER BY pinned DESC, lastReadAt DESC")
     fun observeAll(space: Int): Flow<List<BookEntity>>
 
     @Query("SELECT * FROM books WHERE id = :id")
@@ -19,10 +19,10 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun get(id: Long): BookEntity?
 
-    @Query("SELECT * FROM books WHERE space = :space")
+    @Query("SELECT * FROM books WHERE space = :space AND deletedAt = 0")
     suspend fun getAllOnce(space: Int): List<BookEntity>
 
-    @Query("SELECT * FROM books")
+    @Query("SELECT * FROM books WHERE deletedAt = 0")
     suspend fun getAll(): List<BookEntity>
 
     @Insert
@@ -46,8 +46,17 @@ interface BookDao {
     @Query("DELETE FROM books WHERE id = :id")
     suspend fun delete(id: Long)
 
-    @Query("SELECT COUNT(*) FROM books WHERE title = :title AND sizeBytes = :size AND space = :space")
+    @Query("SELECT COUNT(*) FROM books WHERE title = :title AND sizeBytes = :size AND space = :space AND deletedAt = 0")
     suspend fun countDuplicate(title: String, size: Long, space: Int): Int
+
+    @Query("SELECT * FROM books WHERE deletedAt > 0 AND space = :space ORDER BY deletedAt DESC")
+    suspend fun listTrash(space: Int): List<BookEntity>
+
+    @Query("UPDATE books SET deletedAt = :ts, pinned = 0 WHERE id = :id")
+    suspend fun setDeletedAt(id: Long, ts: Long)
+
+    @Query("SELECT * FROM books WHERE deletedAt > 0 AND deletedAt < :before")
+    suspend fun listExpired(before: Long): List<BookEntity>
 }
 
 @Dao

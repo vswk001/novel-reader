@@ -60,7 +60,9 @@ data class ReaderPrefs(
     /** TTS 朗读语速 0.5..2.0 */
     val ttsRate: Float = 1.0f,
     /** 自动滚动速度 dp/s */
-    val autoScrollSpeed: Int = 140
+    val autoScrollSpeed: Int = 140,
+    /** 每日阅读目标（分钟） */
+    val dailyGoalMin: Int = 30
 )
 
 class SettingsRepository(private val context: Context) {
@@ -85,6 +87,7 @@ class SettingsRepository(private val context: Context) {
         val bookshelfGrid = booleanPreferencesKey("bookshelf_grid")
         val ttsRate = floatPreferencesKey("tts_rate")
         val autoScrollSpeed = intPreferencesKey("auto_scroll_speed")
+        val dailyGoalMin = intPreferencesKey("daily_goal_min")
     }
 
     val prefs: Flow<ReaderPrefs> = context.dataStore.data.map { p ->
@@ -107,7 +110,8 @@ class SettingsRepository(private val context: Context) {
             sortBy = enumOrDefault(p[Keys.sortBy], SortKind.RECENT),
             bookshelfGrid = p[Keys.bookshelfGrid] ?: true,
             ttsRate = p[Keys.ttsRate] ?: 1.0f,
-            autoScrollSpeed = p[Keys.autoScrollSpeed] ?: 140
+            autoScrollSpeed = p[Keys.autoScrollSpeed] ?: 140,
+            dailyGoalMin = p[Keys.dailyGoalMin] ?: 30
         )
     }
 
@@ -136,6 +140,7 @@ class SettingsRepository(private val context: Context) {
             p[Keys.bookshelfGrid] = new.bookshelfGrid
             p[Keys.ttsRate] = new.ttsRate
             p[Keys.autoScrollSpeed] = new.autoScrollSpeed
+            p[Keys.dailyGoalMin] = new.dailyGoalMin
         }
     }
 

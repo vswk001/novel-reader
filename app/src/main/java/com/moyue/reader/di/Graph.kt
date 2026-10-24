@@ -28,6 +28,10 @@ object Graph {
     @Volatile
     var volumeKeyHandler: ((Int) -> Boolean)? = null
 
+    /** 系统「打开方式/分享」带入的待导入 Uri，书架页消费后置空 */
+    @Volatile
+    var pendingImportUri: android.net.Uri? = null
+
     fun init(context: Context) {
         appContext = context.applicationContext
     }
