@@ -304,16 +304,25 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             stopTts()
             return
         }
-        if (tts == null) {
+        if (tts == null || !ttsReady) {
+            // 引擎未初始化/上次失败：重新创建（部分 ROM 用 Application context 偶发初始化失败）
+            runCatching { tts?.shutdown() }
+            tts = null
+            ttsReady = false
             showTransient("正在初始化语音引擎…")
-            tts = TextToSpeech(getApplication<Application>()) { status ->
-                ttsReady = status == TextToSpeech.SUCCESS
-                if (ttsReady) {
-                    tts?.language = Locale.SIMPLIFIED_CHINESE
-                    tts?.setOnUtteranceProgressListener(utteranceListener)
-                    mainHandler.post { startTts() }
-                } else {
-                    mainHandler.post { showTransient("系统语音引擎不可用，请先安装 TTS 引擎") }
+            val app = getApplication<Application>()
+            tts = TextToSpeech(app) { status ->
+                mainHandler.post {
+                    if (status == TextToSpeech.SUCCESS) {
+                        ttsReady = true
+                        pickTtsLanguage()
+                        tts?.setOnUtteranceProgressListener(utteranceListener)
+                        startTts()
+                    } else {
+                        // 无可用引擎：引导去系统 TTS 设置
+                        showTransient("未找到可用语音引擎，正在打开系统设置…")
+                        openTtsSettings()
+                    }
                 }
             }
         } else {
@@ -321,9 +330,42 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         }
     }
 
+    /** 中文不可用时按可用语言回退，避免引擎装了却报"不可用" */
+    private fun pickTtsLanguage() {
+        val engine = tts ?: return
+        val candidates = listOf(
+            Locale.SIMPLIFIED_CHINESE, Locale.CHINA, Locale.CHINESE, Locale.TAIWAN, Locale.getDefault()
+        )
+        for (lang in candidates) {
+            if (engine.isLanguageAvailable(lang) != TextToSpeech.LANG_NOT_SUPPORTED) {
+                engine.language = lang
+                return
+            }
+        }
+        runCatching {
+            engine.availableLanguages.firstOrNull()?.let { engine.language = it }
+        }
+    }
+
+    /** 打开系统「文字转语音」设置页（各 ROM 动作名不同，逐个尝试） */
+    fun openTtsSettings() {
+        val app = getApplication<Application>()
+        val intents = listOf(
+            android.content.Intent("com.android.settings.TTS_SETTINGS"),
+            android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS),
+            android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        for (i in intents) {
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { app.startActivity(i) }.isSuccess) return
+        }
+        showTransient("请到 系统设置 → 语言和输入 → 文字转语音 安装并启用引擎")
+    }
+
     private fun startTts() {
         if (!ttsReady) {
-            showTransient("系统语音引擎不可用，请先安装 TTS 引擎")
+            showTransient("语音引擎未就绪，正在重试…")
+            toggleTts()
             return
         }
         tts?.setSpeechRate(_ui.value.prefs.ttsRate)

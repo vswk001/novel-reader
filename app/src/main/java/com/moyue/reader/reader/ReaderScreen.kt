@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -72,6 +73,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Icon
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -283,9 +289,9 @@ fun ReaderScreen(onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(palette.bg)
-            // 自动滚动时：任意触摸立即停止
-            .pointerInput(ui.autoScroll) {
-                if (ui.autoScroll) {
+            // 自动滚动时：正文区任意触摸立即停止（菜单打开时除外——先收菜单）
+            .pointerInput(ui.autoScroll, ui.menuVisible) {
+                if (ui.autoScroll && !ui.menuVisible) {
                     awaitEachGesture {
                         awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
                         vm.setAutoScroll(false)
@@ -332,14 +338,15 @@ fun ReaderScreen(onBack: () -> Unit) {
                     }
                 )
             }
-            .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible) {
+            .pointerInput(prefs.tapZone, prefs.readMode, ui.menuVisible, ui.autoScroll) {
                 detectTapGestures { offset ->
-                    if (ui.autoScroll) {
-                        vm.setAutoScroll(false)
-                        return@detectTapGestures
-                    }
+                    // 优先级：收菜单 > 停滚动 > 区域翻页/呼出菜单
                     if (ui.menuVisible) {
                         vm.setMenuVisible(false)
+                        return@detectTapGestures
+                    }
+                    if (ui.autoScroll) {
+                        vm.setAutoScroll(false)
                         return@detectTapGestures
                     }
                     if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {
@@ -502,6 +509,64 @@ fun ReaderScreen(onBack: () -> Unit) {
             vm = vm,
             onBack = onBack
         )
+
+        // 自动滚动专用悬浮控制条（最高层，滚动期间常驻：停止 / 减速 / 加速）
+        if (ui.autoScroll) {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = palette.menuBg.copy(alpha = 0.96f),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 44.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.PauseCircle,
+                        contentDescription = "停止自动滚动",
+                        tint = palette.menuText,
+                        modifier = Modifier
+                            .clickable { vm.setAutoScroll(false) }
+                            .padding(10.dp)
+                            .size(24.dp)
+                    )
+                    Icon(
+                        Icons.Filled.Remove,
+                        contentDescription = "减速",
+                        tint = palette.secondary,
+                        modifier = Modifier
+                            .clickable {
+                                vm.updatePrefs {
+                                    it.copy(autoScrollSpeed = (it.autoScrollSpeed - 40).coerceAtLeast(40))
+                                }
+                            }
+                            .padding(10.dp)
+                            .size(20.dp)
+                    )
+                    Text(
+                        "${prefs.autoScrollSpeed}",
+                        color = palette.menuText,
+                        fontSize = 13.sp
+                    )
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "加速",
+                        tint = palette.secondary,
+                        modifier = Modifier
+                            .clickable {
+                                vm.updatePrefs {
+                                    it.copy(autoScrollSpeed = (it.autoScrollSpeed + 40).coerceAtMost(400))
+                                }
+                            }
+                            .padding(10.dp)
+                            .size(20.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -297,15 +297,17 @@ fun ReaderMenuOverlay(
                             vm.toggleTts()
                         }
                         MenuIconButton(
-                            if (ui.autoScroll) "停止滚动" else "自动滚动",
-                            if (ui.autoScroll) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,
+                            "自动滚动",
+                            Icons.Filled.PlayCircle,
                             palette
                         ) {
-                            // 翻页模式下点自动滚动：切到滚动模式并开始
+                            // 翻页模式下点自动滚动：先切到滚动模式；启动后收起菜单，
+                            // 屏幕底部出现专用控制条（停止/调速），正文触摸也可停止
                             if (ui.prefs.readMode != ReadMode.SCROLL) {
                                 vm.updatePrefs { it.copy(readMode = ReadMode.SCROLL) }
                             }
-                            vm.toggleAutoScroll()
+                            vm.setAutoScroll(true)
+                            vm.setMenuVisible(false)
                         }
                     }
                 }
