@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 翻开的书：左右两页（白） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M53,45 C47,40 40,38.5 33,40 L33,68 C40,66.5 47,68 53,73 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M55,45 C61,40 68,38.5 75,40 L75,68 C68,66.5 61,68 55,73 Z" />
+    <!-- 内页文字行（深靛蓝，随页面倾斜） -->
+    <path android:strokeColor="#283593" android:strokeWidth="2.6" android:strokeLineCap="round"
+        android:pathData="M38.5,47.5 L48,50.5" />
+    <path android:strokeColor="#283593" android:strokeWidth="2.6" android:strokeLineCap="round"
+        android:pathData="M38.5,54.5 L48,57.5" />
+    <path android:strokeColor="#283593" android:strokeWidth="2.6" android:strokeLineCap="round"
+        android:pathData="M38.5,61.5 L48,64.5" />
+    <path android:strokeColor="#283593" android:strokeWidth="2.6" android:strokeLineCap="round"
+        android:pathData="M60,50.5 L69.5,47.5" />
+    <path android:strokeColor="#283593" android:strokeWidth="2.6" android:strokeLineCap="round"
+        android:pathData="M60,57.5 L69.5,54.5" />
+    <path android:strokeColor="#283593" android:strokeWidth="2.6" android:strokeLineCap="round"
+        android:pathData="M60,64.5 L69.5,61.5" />
+    <!-- 橙色书签（右页顶部垂下） -->
+    <path
+        android:fillColor="#FF7043"
+        android:pathData="M66,40 L72,39.2 L72,54 L69,50.5 L66,54 Z" />
+</vector>
