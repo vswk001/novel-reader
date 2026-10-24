@@ -160,13 +160,30 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             val images = repo.imagesForChapter(bookId, safe)
             _ui.update { it.copy(chapterText = text, images = images) }
             val s = spec
-            if (s != null) paginate(s) else _ui.update { it.copy(loading = false) }
+            if (s != null) {
+                paginate(s)
+            } else {
+                // 布局参数未就绪：短轮询等待首帧 onSizeChanged（一般毫秒级），
+                // 超时兜底关闭 loading——避免 pages 空 + loading=false 的空白死态
+                var waited = 0
+                while (spec == null && waited < 50) {
+                    kotlinx.coroutines.delay(100)
+                    waited++
+                }
+                spec?.let { paginate(it) } ?: _ui.update { it.copy(loading = false) }
+            }
         }
     }
 
     fun applySpec(newSpec: LayoutSpec) {
         spec = newSpec
         if (_ui.value.chapters.isNotEmpty()) paginate(newSpec)
+    }
+
+    /** 兜底：pages 意外为空时按当前布局参数重排（保持阅读位置） */
+    fun repaginate() {
+        val s = spec ?: return
+        if (_ui.value.chapters.isNotEmpty()) paginate(s)
     }
 
     /**

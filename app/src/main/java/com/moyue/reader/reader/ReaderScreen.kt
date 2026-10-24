@@ -225,7 +225,7 @@ fun ReaderScreen(onBack: () -> Unit) {
     // ---------- 翻页（PAGE 模式用 Pager） ----------
     val pagerState = rememberPagerState(initialPage = 0) { ui.pages.size }
 
-    LaunchedEffect(pagerState) {
+    LaunchedEffect(pagerState, prefs.readMode) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             if (prefs.readMode == ReadMode.PAGE) vm.onPageSettled(page)
         }
@@ -472,16 +472,23 @@ fun ReaderScreen(onBack: () -> Unit) {
                     .onSizeChanged { textAreaSize = it }
             ) {
                 when {
-                    ui.loading && ui.pages.isEmpty() -> CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color = palette.secondary
-                    )
-
                     ui.pages.isEmpty() && ui.book == null -> Text(
                         stringResource(R.string.txt_book_missing),
                         color = palette.secondary,
                         modifier = Modifier.align(Alignment.Center)
                     )
+
+                    // 含正常加载与偶现竞态兜底：pages 空 + 书存在 → 加载态并自动重排自愈
+                    ui.pages.isEmpty() -> Box(Modifier.fillMaxSize()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = palette.secondary
+                        )
+                        LaunchedEffect(ui.chapterText, ui.chapterIdx, ui.loading) {
+                            delay(800)
+                            if (ui.pages.isEmpty()) vm.repaginate()
+                        }
+                    }
 
                     prefs.readMode == ReadMode.SCROLL -> ScrollReaderContent(
                         ui = ui,
