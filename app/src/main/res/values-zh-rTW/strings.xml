@@ -189,7 +189,7 @@
     <string name="msg_restore_ok">恢复完成：匹配到 %1$d 本书（书籍文件需已在本机），合并进度 %2$d 本</string>
     <string name="msg_restore_fail">恢复失败：%1$s</string>
     <string name="sec_about">关于</string>
-    <string name="about_text">墨阅 v1.7.0 · 纯本地小说阅读器\n无网络权限、无广告、无遥测</string>
+    <string name="about_text">墨阅 v%1$s · 纯本地小说阅读器\n联网仅用于检查更新 · 无广告、无遥测</string>
 
     <!-- 统计 -->
     <string name="stats_title">阅读统计</string>

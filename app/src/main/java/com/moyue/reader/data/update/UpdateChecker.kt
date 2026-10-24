@@ -40,8 +40,9 @@ object UpdateChecker {
             conn.setRequestProperty("Accept", "application/vnd.github+json")
             try {
                 val code = conn.responseCode
-                if (code != 200) {
-                    error("HTTP $code")
+                when {
+                    code == 404 -> error("HTTP 404: feed unreachable (private repo or wrong URL)")
+                    code != 200 -> error("HTTP $code")
                 }
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
                 parse(body)
