@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -121,6 +122,7 @@ fun BookshelfScreen(
     var showSearch by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showImportMenu by remember { mutableStateOf(false) }
+    var showTransfer by remember { mutableStateOf(false) }
     var showPrivateMenu by remember { mutableStateOf(false) }
     var actionBook by remember { mutableStateOf<BookEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<BookEntity?>(null) }
@@ -674,7 +676,20 @@ fun BookshelfScreen(
                 showImportMenu = false
                 pickTree.launch(null)
             }
+            ActionRow(
+                Icons.Filled.Wifi,
+                stringResource(R.string.import_wifi),
+                stringResource(R.string.import_wifi_sub)
+            ) {
+                showImportMenu = false
+                showTransfer = true
+            }
         }
+    }
+
+    // Wi-Fi 传书面板
+    if (showTransfer) {
+        TransferPanel(space = space, onDismiss = { showTransfer = false })
     }
 
     // 长按操作 → 底部动作表

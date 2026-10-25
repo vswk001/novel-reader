@@ -277,4 +277,17 @@
     <string name="update_failed_title">Update check failed</string>
     <string name="update_failed_detail">%1$s
 Check your network, or open the release page below. (GitHub API is anonymous-only for public repos.)</string>
+    <string name="transfer_title">Wi-Fi Transfer</string>
+    <string name="transfer_open_hint">Open the address below in a browser on the same Wi-Fi, then enter the pairing code.</string>
+    <string name="transfer_pair_code">Pairing code</string>
+    <string name="transfer_copy">Copy</string>
+    <string name="transfer_copied">Copied</string>
+    <string name="transfer_closing_fmt">Auto-close in %1$d min</string>
+    <string name="transfer_log">Transfer log</string>
+    <string name="transfer_waiting">Waiting for files…</string>
+    <string name="transfer_stop">Stop transfer</string>
+    <string name="transfer_no_wifi">No usable Wi-Fi network address found. Connect to Wi-Fi or enable hotspot first.</string>
+    <string name="transfer_wifi_note">If the page cannot be opened, make sure both devices are on the same Wi-Fi (public networks may enable client isolation), or use the phone hotspot.</string>
+    <string name="import_wifi">Wi-Fi transfer</string>
+    <string name="import_wifi_sub">Send files from a computer browser over LAN</string>
 </resources>

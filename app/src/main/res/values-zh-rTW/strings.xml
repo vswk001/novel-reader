@@ -277,4 +277,17 @@
     <string name="update_failed_title">更新检查失败</string>
     <string name="update_failed_detail">%1$s
 请检查网络，或通过下方入口打开发布页（GitHub API 仅对公开仓库匿名开放）。</string>
+    <string name="transfer_title">Wi-Fi 传书</string>
+    <string name="transfer_open_hint">在同一 Wi-Fi 的电脑浏览器打开下方地址，输入配对码即可传书</string>
+    <string name="transfer_pair_code">配对码</string>
+    <string name="transfer_copy">复制</string>
+    <string name="transfer_copied">已复制</string>
+    <string name="transfer_closing_fmt">%1$d 分钟后自动关闭</string>
+    <string name="transfer_log">传输记录</string>
+    <string name="transfer_waiting">等待文件传入…</string>
+    <string name="transfer_stop">关闭传书</string>
+    <string name="transfer_no_wifi">未找到可用的 Wi-Fi 网络地址，请先连接 Wi-Fi 或开启热点</string>
+    <string name="transfer_wifi_note">若无法打开页面，请确认两台设备在同一 Wi-Fi（公共网络可能开启了设备隔离），或改用手机热点直连</string>
+    <string name="import_wifi">Wi-Fi 传书</string>
+    <string name="import_wifi_sub">电脑浏览器打开地址，免数据线推送</string>
 </resources>

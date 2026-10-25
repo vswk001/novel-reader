@@ -29,8 +29,8 @@ android {
         applicationId = "com.moyue.reader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.9.7"
+        versionCode = 24
+        versionName = "1.10.0"
 
         // 检查更新源（构建期注入，运行时经 BuildConfig.UPDATE_FEED_URL 读取）
         buildConfigField("String", "UPDATE_FEED_URL", "\"$updateFeedUrl\"")
@@ -80,6 +80,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     implementation("androidx.biometric:biometric:1.1.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")

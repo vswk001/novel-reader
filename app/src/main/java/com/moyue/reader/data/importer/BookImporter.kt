@@ -27,19 +27,59 @@ class BookImporter(
 
     suspend fun importUri(uri: Uri, space: Int = 0): ImportResult = withContext(Dispatchers.IO) {
         val name = queryName(uri) ?: context.getString(R.string.importer_unknown_name)
+        val size = querySize(uri)
         try {
-            if (querySize(uri) > MAX_FILE_BYTES) {
+            if (size > MAX_FILE_BYTES) {
                 return@withContext ImportResult(name, false, context.getString(R.string.err_too_big))
-            }
-            val title = name.substringBeforeLast('.')
-            val size = querySize(uri)
-            if (repo.isDuplicate(title, size, space)) {
-                return@withContext ImportResult(name, false, context.getString(R.string.err_duplicate))
             }
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: return@withContext ImportResult(name, false, context.getString(R.string.err_unreadable))
-            if (bytes.isEmpty()) return@withContext ImportResult(name, false, context.getString(R.string.err_empty_file))
+            importBytes(name, size, bytes, space)
+        } catch (e: EpubParseException) {
+            val msg = if (e.detail != null) context.getString(e.resId, e.detail)
+            else context.getString(e.resId)
+            ImportResult(name, false, msg)
+        } catch (e: Exception) {
+            val reason = e.message ?: context.getString(R.string.err_unknown)
+            ImportResult(name, false, context.getString(R.string.err_import_failed, reason))
+        }
+    }
 
+    /** Wi-Fi 传书：本地临时文件导入（浏览器上传） */
+    suspend fun importFile(file: java.io.File, displayName: String, space: Int = 0): ImportResult =
+        withContext(Dispatchers.IO) {
+            val name = displayName.ifBlank { context.getString(R.string.importer_unknown_name) }
+            try {
+                val size = file.length()
+                if (size > MAX_FILE_BYTES) {
+                    return@withContext ImportResult(name, false, context.getString(R.string.err_too_big))
+                }
+                val bytes = if (file.exists()) file.readBytes()
+                else return@withContext ImportResult(name, false, context.getString(R.string.err_unreadable))
+                importBytes(name, size, bytes, space)
+            } catch (e: EpubParseException) {
+                val msg = if (e.detail != null) context.getString(e.resId, e.detail)
+                else context.getString(e.resId)
+                ImportResult(name, false, msg)
+            } catch (e: Exception) {
+                val reason = e.message ?: context.getString(R.string.err_unknown)
+                ImportResult(name, false, context.getString(R.string.err_import_failed, reason))
+            }
+        }
+
+    /** 导入管线：查重 → 编码/EPUB 解析 → 落盘 → 章节入库 */
+    private suspend fun importBytes(
+        name: String,
+        size: Long,
+        bytes: ByteArray,
+        space: Int
+    ): ImportResult {
+        val title = name.substringBeforeLast('.')
+        if (bytes.isEmpty()) return ImportResult(name, false, context.getString(R.string.err_empty_file))
+        if (repo.isDuplicate(title, size, space)) {
+            return ImportResult(name, false, context.getString(R.string.err_duplicate))
+        }
+        return try {
             var bookTitle = title
             val charsetName: String
             val text: String
@@ -101,9 +141,7 @@ class BookImporter(
                 context.getString(R.string.msg_imported, charsetName, chapters.size)
             )
         } catch (e: EpubParseException) {
-            val msg = if (e.detail != null) context.getString(e.resId, e.detail)
-            else context.getString(e.resId)
-            ImportResult(name, false, msg)
+            throw e
         } catch (e: Exception) {
             val reason = e.message ?: context.getString(R.string.err_unknown)
             ImportResult(name, false, context.getString(R.string.err_import_failed, reason))
