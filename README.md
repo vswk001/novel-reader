@@ -7,6 +7,7 @@
 **纯本地、无广告的 Android 小说阅读器 · 联网仅用于检查更新**
 
 [![Release](https://img.shields.io/github/v/release/vswk001/novel-reader?style=flat-square&label=%E5%8F%91%E5%B8%83)](../../releases)
+[![CI](https://github.com/vswk001/novel-reader/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android)](https://developer.android.com)
 [![MinSdk](https://img.shields.io/badge/minSDK-24%20%7C%20Android%207.0+-blue?style=flat-square)](https://developer.android.com/about/versions/nougat)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?style=flat-square&logo=kotlin)](https://kotlinlang.org)

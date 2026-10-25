@@ -38,6 +38,24 @@ object EpubParser {
     /** 图片占位标记字符（渲染端由 ImageSpan 覆盖） */
     const val MARKER = '￼'
 
+    /**
+     * 章节文本内全部图片标记 → 全书拼接文本偏移。
+     * 全书偏移 = 章起点 + 标题长度 + 换行 + normalized 内标记位置。
+     * （标题长度必须计入：v1.9.2 之前漏掉导致 EPUB 图片整体错位、渲染校验失败不显示）
+     */
+    fun imageCharOffsets(chapterStart: Int, title: String, normalizedText: String): IntArray {
+        val base = chapterStart + title.length + 1
+        val out = mutableListOf<Int>()
+        var from = 0
+        while (true) {
+            val p = normalizedText.indexOf(MARKER, from)
+            if (p < 0) break
+            out += base + p
+            from = p + 1
+        }
+        return out.toIntArray()
+    }
+
     fun parse(bytes: ByteArray): EpubBook {
         val entries = readZip(bytes)
         val container = entries["meta-inf/container.xml"]

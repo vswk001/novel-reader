@@ -211,6 +211,22 @@ fun ReaderScreen(onBack: () -> Unit) {
         return ui.highlights.firstOrNull { it.chapterIdx == ui.chapterIdx && off >= it.start && off < it.end }
     }
 
+    /** 点击位置是否贴近选区手柄（避免误触 tap 关闭选区） */
+    fun nearSelectionHandle(pos: Offset): Boolean {
+        val sel = selection ?: return false
+        val hit = hitTest(pos) ?: return false
+        val (layout, local, page) = hit
+        val from = page.start
+        val s = sel.first - from
+        val e = sel.last + 1 - from
+        if (s !in 0..layout.text.length || e !in 0..layout.text.length) return false
+        val p1 = handlePoint(layout, s)
+        val p2 = handlePoint(layout, e)
+        // 与手柄命中判定同阈值（72px），命中范围含手柄竖条上方区域
+        val hs = Offset(local.x, local.y + 20 * density.density)
+        return (hs - p1).getDistance() < 96f || (hs - p2).getDistance() < 96f
+    }
+
     // 翻页/切章/菜单打开时清除选区
     LaunchedEffect(ui.pageIdx, ui.chapterIdx, ui.menuVisible) {
         if (selStart != null) clearSelection()
@@ -436,7 +452,8 @@ fun ReaderScreen(onBack: () -> Unit) {
                             return@detectTapGestures
                         }
                         if (selStart != null) {
-                            clearSelection()
+                            // 点在手柄附近：保留选区（等待拖动），不视为关闭
+                            if (!nearSelectionHandle(offset)) clearSelection()
                             return@detectTapGestures
                         }
                         if (prefs.readMode == ReadMode.SCROLL || prefs.tapZone == ClickZone.OFF) {

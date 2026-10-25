@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    name: Unit tests & debug build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Debug build
+        run: ./gradlew :app:assembleDebug
+
+      # 防回归：版本号必须走占位符，禁止在文案中硬编码版本字面量
+      # （v1.9.6 曾因 sed 链静默失败导致关于页滞留 v1.7.0 达 8 个版本）
+      - name: Guard version placeholder
+        run: |
+          grep -qE 'about_text">.*%1[$]s' app/src/main/res/values/strings.xml
+          if grep -rqE '(墨阅|MoYue) v[0-9]+\.[0-9]+' app/src/main/res/values*/strings.xml; then
+            echo "hardcoded version literal found"; exit 1
+          fi
+          echo "version placeholder OK"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoYue-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk

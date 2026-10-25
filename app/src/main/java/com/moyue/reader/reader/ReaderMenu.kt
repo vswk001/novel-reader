@@ -49,6 +49,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,6 +91,16 @@ fun ReaderMenuOverlay(
 ) {
     var sheet by remember { mutableStateOf<ReaderSheet?>(null) }
     var showSleepTimer by remember { mutableStateOf(false) }
+    // 定时剩余分钟显示：每 30 秒刷新一次时钟
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(ui.ttsSleepDeadline) {
+        if (ui.ttsSleepDeadline != null) {
+            while (true) {
+                nowMillis = System.currentTimeMillis()
+                kotlinx.coroutines.delay(30_000)
+            }
+        }
+    }
 
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
         // 顶栏
@@ -341,7 +352,7 @@ fun ReaderMenuOverlay(
                         if (ui.ttsRunning) {
                             val label = when {
                                 ui.ttsSleepDeadline != null -> {
-                                    val min = ((ui.ttsSleepDeadline - System.currentTimeMillis()) / 60_000L)
+                                    val min = ((ui.ttsSleepDeadline - nowMillis) / 60_000L)
                                         .coerceAtLeast(0L)
                                     "$min′"
                                 }
