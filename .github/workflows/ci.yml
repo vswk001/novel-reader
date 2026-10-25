@@ -18,10 +18,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # ubuntu-latest 预装 Android SDK（含许可），Gradle/AGP 自动补齐所需组件
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
