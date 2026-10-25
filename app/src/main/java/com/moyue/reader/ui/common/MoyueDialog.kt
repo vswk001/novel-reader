@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,7 +59,13 @@ fun MoyueDialog(
                 .padding(horizontal = 20.dp)
                 .fillMaxWidth()
         ) {
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
+            // 高度上限：内容过长时操作按钮保持可见（v1.10.0 更新日志曾把按钮顶出屏幕）
+            val maxH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.82f
+            Column(
+                Modifier
+                    .heightIn(max = maxH)
+                    .padding(horizontal = 24.dp, vertical = 22.dp)
+            ) {
                 Text(title, style = MaterialTheme.typography.titleLarge)
                 if (!subtitle.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
@@ -67,7 +76,13 @@ fun MoyueDialog(
                         lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
                     )
                 }
-                content()
+                Column(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    content()
+                }
                 Spacer(Modifier.height(20.dp))
                 Row(
                     Modifier.fillMaxWidth(),

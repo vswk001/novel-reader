@@ -506,10 +506,12 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
             }
             // 检查结果：新版本
             updateResult?.let { info ->
+                // 副标题避免与标题重复 tag
+                val relName = info.name.orEmpty().trim().removePrefix(info.tag).trim()
                 com.moyue.reader.ui.common.MoyueDialog(
                     onDismissRequest = { updateResult = null },
                     title = stringResource(R.string.update_new_title, info.tag),
-                    subtitle = info.name,
+                    subtitle = relName.ifBlank { null },
                     confirmText = stringResource(
                         if (info.apkUrl != null) R.string.update_download else R.string.update_open_page
                     ),
@@ -525,12 +527,15 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                         }
                     }
                 ) {
+                    // 日志截短：对话框内可滚动兜底，正文尽量精炼
+                    val notes = (info.notes.orEmpty().ifBlank { info.name.orEmpty() })
+                        .replace("#", "")
+                        .replace("*", "")
+                        .replace("```", "")
+                        .replace(Regex("\\n{3,}"), "\n\n")
+                        .trim()
                     Text(
-                        (info.notes.orEmpty().ifBlank { info.name.orEmpty() })
-                            .replace("#", "")
-                            .replace("*", "")
-                            .replace("```", "")
-                            .take(1200),
+                        notes.take(600) + if (notes.length > 600) "…" else "",
                         fontSize = 13.sp,
                         lineHeight = 19.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
