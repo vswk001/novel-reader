@@ -329,20 +329,30 @@ fun ReaderScreen(onBack: () -> Unit) {
         }
     }
 
-    // ---------- 阅读时长统计 ----------
+    // ---------- 阅读时长统计与退出进度 ----------
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
+        /** 退出时按用户"正在看"的页持久化（动画未落定的 settledPage 会落后一页） */
+        fun visiblePage(): Int? {
+            if (ui.pages.isEmpty()) return null
+            return if (prefs.readMode == ReadMode.SCROLL) {
+                val header = if (ui.chapterIdx > 0) 1 else 0
+                (scrollState.firstVisibleItemIndex - header).coerceIn(0, ui.pages.size - 1)
+            } else {
+                pagerState.currentPage.coerceIn(0, ui.pages.size - 1)
+            }
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> vm.onReaderVisible()
-                Lifecycle.Event.ON_PAUSE -> vm.onReaderHidden()
+                Lifecycle.Event.ON_PAUSE -> vm.onReaderHidden(visiblePage())
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            vm.onReaderHidden()
+            vm.onReaderHidden(visiblePage())
         }
     }
     LaunchedEffect(Unit) {

@@ -629,8 +629,16 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         }
     }
 
-    fun onReaderHidden() {
+    fun onReaderHidden(visiblePage: Int? = null) {
         persistJob?.cancel()
+        // 退出时以用户正在看的页为准（翻页动画未落定时 settledPage 落后，会少存一页）
+        visiblePage?.let { p ->
+            val st = _ui.value
+            if (st.pages.isNotEmpty()) {
+                val safe = p.coerceIn(0, st.pages.size - 1)
+                _ui.update { it.copy(pageIdx = safe) }
+            }
+        }
         persistProgress()
         if (readStartAt <= 0L) return
         val delta = System.currentTimeMillis() - readStartAt
