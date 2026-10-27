@@ -6,6 +6,7 @@ import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
 import com.moyue.reader.data.db.BookmarkEntity
 import com.moyue.reader.data.repo.BookRepository
+import com.moyue.reader.data.repo.BookTags
 import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.data.repo.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,8 @@ class BackupManager(
         val coverHue: Int,
         val space: Int = 0,
         val bookmarks: List<BackupBookmark>,
-        val highlights: List<BackupHighlight> = emptyList()
+        val highlights: List<BackupHighlight> = emptyList(),
+        val tags: List<String> = emptyList()
     )
 
     @Serializable
@@ -85,7 +87,8 @@ class BackupManager(
                 books = books.map { b ->
                     b.toBackup().copy(
                         bookmarks = repo.bookmarksOnce(b.id).map { it.toBackupBookmark() },
-                        highlights = repo.listHighlightsOnce(b.id).map { it.toBackupHighlight() }
+                        highlights = repo.listHighlightsOnce(b.id).map { it.toBackupHighlight() },
+                        tags = BookTags.parse(b.tags)
                     )
                 }
             )
@@ -123,6 +126,10 @@ class BackupManager(
                     if (!dup) {
                         repo.addBookmark(target.id, bm.chapterIdx, bm.charOffset, bm.excerpt)
                     }
+                }
+                if (bk.tags.isNotEmpty()) {
+                    val merged = (BookTags.parse(target.tags) + bk.tags).distinct()
+                    repo.setTags(target.id, merged)
                 }
                 val existingHl = repo.listHighlightsOnce(target.id)
                 for (h in bk.highlights) {

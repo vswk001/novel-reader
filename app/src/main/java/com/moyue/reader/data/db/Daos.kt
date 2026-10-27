@@ -43,6 +43,9 @@ interface BookDao {
     @Query("UPDATE books SET space = :space WHERE id = :id")
     suspend fun setSpace(id: Long, space: Int)
 
+    @Query("UPDATE books SET tags = :tags WHERE id = :id")
+    suspend fun setTags(id: Long, tags: String)
+
     @Query("DELETE FROM books WHERE id = :id")
     suspend fun delete(id: Long)
 

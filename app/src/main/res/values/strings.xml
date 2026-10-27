@@ -290,4 +290,14 @@ Check your network, or open the release page below. (GitHub API is anonymous-onl
     <string name="transfer_wifi_note">If the page cannot be opened, make sure both devices are on the same Wi-Fi (public networks may enable client isolation), or use the phone hotspot.</string>
     <string name="import_wifi">Wi-Fi transfer</string>
     <string name="import_wifi_sub">Send files from a computer browser over LAN</string>
+    <string name="tag_all">All</string>
+    <string name="action_tags">Tags</string>
+    <string name="action_tags_none">No tags yet</string>
+    <string name="tag_new_hint">New tag (max 12 chars)</string>
+    <string name="tag_add">Add</string>
+    <string name="update_install">Install</string>
+    <string name="update_downloading_fmt">Downloading %1$d%%</string>
+    <string name="update_dl_size_fmt">%1$d / %2$d MB</string>
+    <string name="update_ready_install">Download finished — tap Install</string>
+    <string name="update_need_install_permission">Allow "Install unknown apps" for MoYue in the system page just opened, then tap Install again</string>
 </resources>

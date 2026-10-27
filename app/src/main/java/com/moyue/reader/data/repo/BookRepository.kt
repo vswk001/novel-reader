@@ -61,6 +61,9 @@ class BookRepository(
     /** 在普通书架与隐私空间之间转移书籍（文件、进度、书签保持不变） */
     suspend fun setSpace(bookId: Long, space: Int) = bookDao.setSpace(bookId, space)
 
+    suspend fun setTags(bookId: Long, tags: List<String>) =
+        bookDao.setTags(bookId, BookTags.serialize(tags))
+
     /**
      * 用最新章节规则重新切分已导入书籍（基于应用内副本，无需源文件）。
      * 阅读进度按字符偏移映射到新章节，不会丢失；EPUB 的结构化目录不参与重切。

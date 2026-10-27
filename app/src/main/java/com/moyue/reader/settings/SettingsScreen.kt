@@ -32,6 +32,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -504,29 +505,90 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                     dismissText = stringResource(R.string.btn_close)
                 ) {}
             }
-            // 检查结果：新版本
+            // 检查结果：新版本 → 应用内下载 → 安装
             updateResult?.let { info ->
-                // 副标题避免与标题重复 tag
+                // 下载状态：null=未开始；-1L 下载中；>0 已完成（DownloadManager id）
+                var dlId by remember(info.tag) {
+                    mutableStateOf(
+                        if (com.moyue.reader.data.update.UpdateDownloader.targetFile(context2).exists()) -2L else 0L
+                    )
+                }
+                var dlState by remember(info.tag) {
+                    mutableStateOf(com.moyue.reader.data.update.UpdateDownloader.DlState(0, 0, 0))
+                }
+                // 轮询下载进度
+                LaunchedEffect(dlId) {
+                    while (dlId > 0) {
+                        dlState = com.moyue.reader.data.update.UpdateDownloader.query(context2, dlId)
+                            ?: break
+                        if (dlState.done) break
+                        kotlinx.coroutines.delay(500)
+                    }
+                }
+
                 val relName = info.name.orEmpty().trim().removePrefix(info.tag).trim()
+                val downloaded = dlId == -2L || (dlId > 0 && dlState.done)
                 com.moyue.reader.ui.common.MoyueDialog(
                     onDismissRequest = { updateResult = null },
                     title = stringResource(R.string.update_new_title, info.tag),
                     subtitle = relName.ifBlank { null },
-                    confirmText = stringResource(
-                        if (info.apkUrl != null) R.string.update_download else R.string.update_open_page
-                    ),
+                    confirmText = when {
+                        downloaded -> stringResource(R.string.update_install)
+                        dlId != 0L -> stringResource(R.string.update_downloading_fmt, dlState.percent)
+                        info.apkUrl != null -> stringResource(R.string.update_download)
+                        else -> stringResource(R.string.update_open_page)
+                    },
                     onConfirm = {
-                        val target = info.apkUrl ?: info.htmlUrl ?: releasePage
-                        runCatching {
-                            context2.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(target)
+                        when {
+                            downloaded -> {
+                                UpdateInstallerHelper.install(context2)?.let { msg ->
+                                    android.widget.Toast.makeText(context2, msg, android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            dlId == 0L && info.apkUrl != null -> {
+                                dlId = com.moyue.reader.data.update.UpdateDownloader.enqueue(
+                                    context2, info.apkUrl,
+                                    "MoYue ${info.tag}"
                                 )
-                            )
+                            }
+                            else -> {
+                                val target = info.htmlUrl ?: releasePage
+                                runCatching {
+                                    context2.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(target)
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
                 ) {
+                    if (dlId > 0 && !downloaded) {
+                        LinearProgressIndicator(
+                            progress = { dlState.percent / 100f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(
+                                R.string.update_dl_size_fmt,
+                                dlState.bytesSoFar / 1048576, dlState.totalBytes / 1048576
+                            ),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    if (downloaded) {
+                        Text(
+                            stringResource(R.string.update_ready_install),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
                     // 日志截短：对话框内可滚动兜底，正文尽量精炼
                     val notes = (info.notes.orEmpty().ifBlank { info.name.orEmpty() })
                         .replace("#", "")

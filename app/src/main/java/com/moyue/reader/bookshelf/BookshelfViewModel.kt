@@ -7,6 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
+import com.moyue.reader.data.repo.BookTags
 import com.moyue.reader.data.repo.ReaderPrefs
 import com.moyue.reader.data.repo.SortKind
 import com.moyue.reader.di.Graph
@@ -33,13 +34,28 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
         val prefs: ReaderPrefs = ReaderPrefs(),
         val query: String = "",
         val importing: Boolean = false,
-        val message: String? = null
+        val message: String? = null,
+        /** 当前标签筛选；null=全部 */
+        val tagFilter: String? = null
     ) {
+        /** 当前空间全部标签（按书籍数降序、同数按名称） */
+        val allTags: List<Pair<String, Int>>
+            get() = books
+                .flatMap { BookTags.parse(it.tags) }
+                .groupingBy { it }
+                .eachCount()
+                .entries
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                .map { it.key to it.value }
+
         val visible: List<BookEntity>
             get() {
                 val q = query.trim()
-                val filtered = if (q.isEmpty()) books else books.filter {
+                var filtered = if (q.isEmpty()) books else books.filter {
                     it.title.contains(q, ignoreCase = true)
+                }
+                tagFilter?.let { t ->
+                    filtered = filtered.filter { t in BookTags.parse(it.tags) }
                 }
                 val sorted = when (prefs.sortBy) {
                     SortKind.RECENT -> filtered.sortedByDescending { it.lastReadAt }
@@ -71,6 +87,14 @@ class BookshelfViewModel(app: Application, savedState: SavedStateHandle) : Andro
 
     fun setQuery(q: String) {
         query.value = q
+    }
+
+    fun setTagFilter(tag: String?) {
+        _ui.update { it.copy(tagFilter = tag) }
+    }
+
+    fun setBookTags(book: BookEntity, tags: List<String>) {
+        viewModelScope.launch { repo.setTags(book.id, tags) }
     }
 
     fun clearMessage() {

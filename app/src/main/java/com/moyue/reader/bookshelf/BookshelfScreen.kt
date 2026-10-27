@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,6 +94,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.moyue.reader.R
 import com.moyue.reader.data.db.BookEntity
+import com.moyue.reader.data.repo.BookTags
 import com.moyue.reader.data.repo.SortKind
 import com.moyue.reader.di.Graph
 import com.moyue.reader.privacy.PasswordDialog
@@ -126,6 +130,7 @@ fun BookshelfScreen(
     var showPrivateMenu by remember { mutableStateOf(false) }
     var actionBook by remember { mutableStateOf<BookEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<BookEntity?>(null) }
+    var tagEditTarget by remember { mutableStateOf<BookEntity?>(null) }
     var pwdKind by remember { mutableStateOf<PasswordDialogKind?>(null) }
     var bioChecked by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -485,6 +490,40 @@ fun BookshelfScreen(
                     )
                 }
 
+                // ---- 标签筛选条（有标签才显示） ----
+                val allTags = ui.allTags
+                if (allTags.isNotEmpty()) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        item {
+                            AssistChip(
+                                onClick = { vm.setTagFilter(null) },
+                                label = {
+                                    Text(
+                                        if (ui.tagFilter == null) stringResource(R.string.tag_all) + " ✓"
+                                        else stringResource(R.string.tag_all)
+                                    )
+                                }
+                            )
+                        }
+                        items(allTags, key = { it.first }) { (tag, count) ->
+                            AssistChip(
+                                onClick = {
+                                    vm.setTagFilter(if (ui.tagFilter == tag) null else tag)
+                                },
+                                label = {
+                                    Text(
+                                        if (ui.tagFilter == tag) "$tag($count) ✓" else "$tag($count)"
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
                 val books = ui.visible
                 if (books.isEmpty()) {
                     // verticalScroll 使空书架也支持下拉进入隐私空间
@@ -730,6 +769,16 @@ fun BookshelfScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            ActionRow(
+                Icons.Filled.Label,
+                stringResource(R.string.action_tags),
+                BookTags.parse(book.tags).joinToString(" / ").ifBlank {
+                    stringResource(R.string.action_tags_none)
+                }
+            ) {
+                tagEditTarget = book
+                actionBook = null
+            }
             if (book.charset != "EPUB") {
                 ActionRow(
                     Icons.Filled.Refresh,
@@ -769,6 +818,16 @@ fun BookshelfScreen(
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    // 标签编辑
+    tagEditTarget?.let { book ->
+        TagEditDialog(
+            book = book,
+            allTags = ui.allTags.map { it.first },
+            onSave = { vm.setBookTags(book, it) },
+            onDismiss = { tagEditTarget = null }
+        )
     }
 
     // 删除确认：默认移入回收站，可选彻底删除
