@@ -87,9 +87,16 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     private var chapterJob: Job? = null
     private var chaptersLoaded = false
 
-    /** 分页结果 LRU 缓存（章节 → 排版参数 + 页表），翻章往返免重算 */
-    private val pageCache = object : LinkedHashMap<Int, Pair<LayoutSpec, List<PaginationEngine.Page>>>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Pair<LayoutSpec, List<PaginationEngine.Page>>>) = size > 8
+    /** 分页结果 LRU 缓存（章节 → 排版参数+文本+图片+页表），翻章往返免重算 */
+    private class PageCacheEntry(
+        val spec: LayoutSpec,
+        val text: String,
+        val images: List<BookImageEntity>,
+        val pages: List<PaginationEngine.Page>
+    )
+
+    private val pageCache = object : LinkedHashMap<Int, PageCacheEntry>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, PageCacheEntry>) = size > 8
     }
 
     /** 进度写库防抖：滚动模式下 onPageSettled 高频触发，停顿后再落库 */
@@ -189,10 +196,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     /**
      * 分页用整章 spanned：与渲染共用 PageSpans.apply，
      * ImageSpan 边界一致 → 含图片行的行高测量与渲染完全相同。
+     * 入参用启动时的状态快照（不读 live state，防分页期间章节切换造成文本/页表错配）。
      */
-    private fun spannedFor(s: LayoutSpec) = PageSpans.apply(
-        _ui.value.chapterText, 0,
-        _ui.value.highlights, null, _ui.value.images
+    private fun spannedFor(st: UiState, s: LayoutSpec) = PageSpans.apply(
+        st.chapterText, 0,
+        st.highlights, null, st.images
     ) { img ->
         PageImageDrawable(
             java.io.File(repo.imageDir(bookId), img.fileName),
@@ -211,10 +219,18 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
                 typeface = if (s.serif) Typeface.SERIF else Typeface.DEFAULT
             }
             val engine = PaginationEngine(paint, s.pageWidth, s.pageHeight, s.lineSpacing)
+            // 缓存命中条件含文本与图片（重切章节后同章文本变化不得复用旧页表）
             val cached = synchronized(pageCache) { pageCache[st.chapterIdx] }
-                ?.takeIf { it.first == s }?.second
-            val pages = cached ?: engine.paginate(spannedFor(s)).also {
-                synchronized(pageCache) { pageCache[st.chapterIdx] = s to it }
+            val pages = if (cached != null && cached.spec == s && cached.text == text &&
+                cached.images == st.images
+            ) {
+                cached.pages
+            } else {
+                engine.paginate(spannedFor(st, s)).also {
+                    synchronized(pageCache) {
+                        pageCache[st.chapterIdx] = PageCacheEntry(s, text, st.images, it)
+                    }
+                }
             }
             // 偏移是全书绝对值，页表是章节内相对值：必须换算后再定位
             val chapterStart = st.chapters.getOrNull(st.chapterIdx)?.charStart ?: 0
@@ -222,9 +238,19 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             pendingOffset = null
             val relOffset = (absOffset - chapterStart).coerceIn(0, text.length)
             val idx = PaginationEngine.indexOfOffset(pages, relOffset)
-            _ui.update { it.copy(pages = pages, pageIdx = idx, loading = false) }
-            // 章节切换完成且 TTS 在等待 → 继续朗读
-            if (ttsPending && _ui.value.ttsRunning) {
+            // 分页是 CPU 阻塞段（无挂起点，cancel 不生效）：完成时若章节已被切换，
+            // 本次结果属于旧章节，必须丢弃——否则旧页表配新文本 = 页边界越界 → 整屏空白
+            _ui.update { cur ->
+                if (cur.chapterIdx == st.chapterIdx && cur.chapterText == text) {
+                    cur.copy(pages = pages, pageIdx = idx, loading = false)
+                } else {
+                    cur
+                }
+            }
+            // 章节切换完成且 TTS 在等待 → 继续朗读（同样只对未被替换的章节生效）
+            if (ttsPending && _ui.value.ttsRunning &&
+                _ui.value.chapterIdx == st.chapterIdx && _ui.value.chapterText == text
+            ) {
                 ttsPending = false
                 speakCurrentPage()
             }

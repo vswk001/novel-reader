@@ -507,6 +507,20 @@ fun ReaderScreen(onBack: () -> Unit) {
                         }
                     }
 
+                    // 页表与文本不匹配（首页起点即越界）→ 视为分页竞态残留，重排自愈
+                    ui.pages.first().start >= ui.chapterText.length && ui.pages.last().end > ui.chapterText.length -> Box(
+                        Modifier.fillMaxSize()
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = palette.secondary
+                        )
+                        LaunchedEffect(ui.chapterText, ui.pages) {
+                            delay(300)
+                            vm.repaginate()
+                        }
+                    }
+
                     prefs.readMode == ReadMode.SCROLL -> ScrollReaderContent(
                         ui = ui,
                         vm = vm,
