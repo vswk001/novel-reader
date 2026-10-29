@@ -459,7 +459,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                 updateError = null
                 updateLatest = false
                 scope.launch {
-                    com.moyue.reader.data.update.UpdateChecker.fetch()
+                    com.moyue.reader.data.update.UpdateChecker.fetchWithMirrors()
                         .onSuccess { info ->
                             if (com.moyue.reader.data.update.UpdateChecker.isNewer(
                                     info.tag, com.moyue.reader.BuildConfig.VERSION_NAME
@@ -516,12 +516,30 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                 var dlState by remember(info.tag) {
                     mutableStateOf(com.moyue.reader.data.update.UpdateDownloader.DlState(0, 0, 0))
                 }
-                // 轮询下载进度
+                // 下载候选链：直链优先，失败自动切镜像（镜像列表由构建注入）
+                val dlUrls = remember(info.tag) {
+                    listOfNotNull(info.apkUrl) + info.apkMirrors
+                }
+                var dlUrlIdx by remember(info.tag) { mutableStateOf(0) }
+                // 轮询下载进度；失败自动换下一个源重试
                 LaunchedEffect(dlId) {
                     while (dlId > 0) {
                         dlState = com.moyue.reader.data.update.UpdateDownloader.query(context2, dlId)
                             ?: break
                         if (dlState.done) break
+                        if (dlState.status == android.app.DownloadManager.STATUS_FAILED) {
+                            if (dlUrlIdx < dlUrls.lastIndex) {
+                                dlUrlIdx++
+                                dlId = com.moyue.reader.data.update.UpdateDownloader.enqueue(
+                                    context2, dlUrls[dlUrlIdx], "MoYue ${info.tag}"
+                                )
+                                continue
+                            }
+                            // 全部候选失败：回到可重试状态
+                            dlUrlIdx = 0
+                            dlId = 0L
+                            break
+                        }
                         kotlinx.coroutines.delay(500)
                     }
                 }
@@ -546,9 +564,9 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                                 }
                             }
                             dlId == 0L && info.apkUrl != null -> {
+                                dlUrlIdx = 0
                                 dlId = com.moyue.reader.data.update.UpdateDownloader.enqueue(
-                                    context2, info.apkUrl,
-                                    "MoYue ${info.tag}"
+                                    context2, dlUrls[dlUrlIdx], "MoYue ${info.tag}"
                                 )
                             }
                             else -> {

@@ -26,8 +26,62 @@ object UpdateChecker {
         val htmlUrl: String?,
         /** APK 直链（assets 中第一个 .apk） */
         val apkUrl: String?,
-        val apkSizeBytes: Long?
+        val apkSizeBytes: Long?,
+        /** APK 备用下载镜像（直链失败时依次回退） */
+        val apkMirrors: List<String> = emptyList()
     )
+
+    /** 镜像前缀列表（构建期注入，逗号分隔） */
+    fun mirrorPrefixes(): List<String> =
+        BuildConfig.UPDATE_MIRRORS.split(',')
+            .map { it.trim().trimEnd('/') + "/" }
+            .filter { it.startsWith("http") }
+
+    /**
+     * feed 形如「代理前缀 + https://真实地址」时拆出前缀与真实地址；否则前缀为 null。
+     * 兼容 ghproxy 类反代与 Cloudflare Worker 路径式代理。
+     */
+    fun splitProxyFeed(feed: String): Pair<String?, String> {
+        val idx = feed.indexOf("https://", 8)
+        return if (idx > 0) feed.substring(0, idx) to feed.substring(idx) else null to feed
+    }
+
+    /** API 候选链：原始 feed 优先，其后依次套镜像前缀（feed 自带代理前缀则不再套） */
+    fun apiCandidates(feed: String, prefixes: List<String> = mirrorPrefixes()): List<String> {
+        val (prefix, real) = splitProxyFeed(feed)
+        return if (prefix != null) listOf(feed)
+        else listOf(feed) + prefixes.map { it + real }
+    }
+
+    /** APK 下载候选链：与 feed 相同的代理/镜像策略（重定向直链同样被反代覆盖） */
+    fun downloadCandidates(
+        feed: String,
+        apkUrl: String,
+        prefixes: List<String> = mirrorPrefixes()
+    ): List<String> {
+        val (prefix, _) = splitProxyFeed(feed)
+        return if (prefix != null) listOf(prefix + apkUrl)
+        else listOf(apkUrl) + prefixes.map { it + apkUrl }
+    }
+
+    /**
+     * 检查更新（带镜像回退）：依次尝试 API 候选链，
+     * 成功后为 APK 直链生成同策略的下载候选链（见 UpdateDownloader 的失败续传逻辑）。
+     */
+    suspend fun fetchWithMirrors(feed: String = BuildConfig.UPDATE_FEED_URL): Result<ReleaseInfo> {
+        var last: Result<ReleaseInfo>? = null
+        for (candidate in apiCandidates(feed)) {
+            val r = fetch(candidate)
+            if (r.isSuccess) {
+                return r.map { info ->
+                    val urls = info.apkUrl?.let { downloadCandidates(feed, it) }.orEmpty()
+                    info.copy(apkUrl = urls.firstOrNull(), apkMirrors = urls.drop(1))
+                }
+            }
+            last = r
+        }
+        return last ?: Result.failure(IllegalStateException("no update candidates"))
+    }
 
     suspend fun fetch(feedUrl: String = BuildConfig.UPDATE_FEED_URL): Result<ReleaseInfo> =
         withContext(Dispatchers.IO) {

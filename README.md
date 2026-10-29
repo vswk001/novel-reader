@@ -106,6 +106,16 @@ cd novel-reader
 # 或 export UPDATE_FEED_URL=...
 ```
 
+**更新镜像**（国内访问 GitHub 不稳定时的自动回退，同样构建期注入）：
+
+```bash
+# 逗号分隔的镜像前缀；直连失败后依次尝试（API 检查与 APK 下载同策略）
+./gradlew :app:assembleRelease -PupdateMirrors=https://ghproxy.net/,https://ghfast.top/
+# 或 export UPDATE_MIRRORS=...
+```
+
+自建更稳的镜像可部署 [docs/update-proxy-worker.js](docs/update-proxy-worker.js)（Cloudflare Worker，免费额度充足），并把更新源指到自己的 Worker 域名。
+
 签名：在项目根目录放置 `keystore.properties`（已 gitignore）：
 
 ```properties

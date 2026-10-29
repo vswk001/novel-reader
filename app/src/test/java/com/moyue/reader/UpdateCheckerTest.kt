@@ -53,4 +53,37 @@ class UpdateCheckerTest {
         assertFalse(UpdateChecker.isNewer("v1.9.6", "1.9.6"))
         assertFalse(UpdateChecker.isNewer("1.9.5", "v1.9.6"))
     }
+
+    // ---- 镜像回退链 ----
+
+    private val M = listOf("https://ghproxy.net/", "https://ghfast.top/")
+
+    @Test
+    fun `direct feed gets mirror api candidates`() {
+        val feed = "https://api.github.com/repos/o/r/releases/latest"
+        org.junit.Assert.assertEquals(
+            listOf(feed) + M.map { it + feed },
+            UpdateChecker.apiCandidates(feed, M)
+        )
+    }
+
+    @Test
+    fun `proxied feed is not double wrapped`() {
+        val feed = "https://my.worker.dev/https://api.github.com/repos/o/r/releases/latest"
+        org.junit.Assert.assertEquals(listOf(feed), UpdateChecker.apiCandidates(feed, M))
+        org.junit.Assert.assertEquals("https://my.worker.dev/", UpdateChecker.splitProxyFeed(feed).first)
+    }
+
+    @Test
+    fun `download candidates follow feed proxy strategy`() {
+        val apk = "https://github.com/o/r/releases/download/v1/a.apk"
+        org.junit.Assert.assertEquals(
+            listOf(apk) + M.map { it + apk },
+            UpdateChecker.downloadCandidates("https://api.github.com/x", apk, M)
+        )
+        org.junit.Assert.assertEquals(
+            listOf("https://my.worker.dev/" + apk),
+            UpdateChecker.downloadCandidates("https://my.worker.dev/https://api.github.com/x", apk, M)
+        )
+    }
 }

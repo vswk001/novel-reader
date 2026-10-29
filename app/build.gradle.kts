@@ -29,11 +29,18 @@ android {
         applicationId = "com.moyue.reader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 30
-        versionName = "1.11.4"
+        versionCode = 31
+        versionName = "1.12.0"
 
         // 检查更新源（构建期注入，运行时经 BuildConfig.UPDATE_FEED_URL 读取）
         buildConfigField("String", "UPDATE_FEED_URL", "\"$updateFeedUrl\"")
+
+        // 更新镜像前缀（逗号分隔，直连失败时依次回退；-PupdateMirrors 或 UPDATE_MIRRORS 覆盖）
+        val updateMirrors: String =
+            (project.findProperty("updateMirrors") as String?)
+                ?: System.getenv("UPDATE_MIRRORS")
+                ?: "https://ghproxy.net/,https://ghfast.top/"
+        buildConfigField("String", "UPDATE_MIRRORS", "\"$updateMirrors\"")
     }
 
     signingConfigs {
