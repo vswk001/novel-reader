@@ -903,16 +903,19 @@ private fun ScrollReaderContent(
     }
     // 进度恢复：分页完成或跳转后滚动到目标页（不 key pageIdx：跟踪写页码不得重启本协程）
     LaunchedEffect(ui.pages, pageHeightPx, headerCount) {
-        if (ui.pages.isNotEmpty() && pageHeightPx > 0) {
-            if (!scrollState.isScrollInProgress) {
-                val target = headerCount + ui.pageIdx
-                if (scrollState.firstVisibleItemIndex != target) {
-                    scrollState.scrollToItem(target)
-                }
-            }
-            // 用户在恢复前已开始触摸滚动：尊重用户手势，同样视为已就位
-            restored = true
+        if (ui.pages.isEmpty() || pageHeightPx <= 0) return@LaunchedEffect
+        val target = headerCount + ui.pageIdx
+        // 等首帧布局完成后再滚：未测量的 LazyList 上 scrollToItem 可能被初始布局吞掉
+        withFrameNanos { }
+        var attempt = 0
+        while (attempt < 3) {
+            if (scrollState.isScrollInProgress) break // 用户已接管手势
+            if (scrollState.firstVisibleItemIndex == target) break
+            scrollState.scrollToItem(target)
+            withFrameNanos { } // 滚后再验证（部分机型需两帧才生效）
+            attempt++
         }
+        restored = true
     }
 
     val density = LocalDensity.current

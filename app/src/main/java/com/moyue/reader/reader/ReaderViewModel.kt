@@ -650,7 +650,17 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
                 _ui.update { it.copy(pageIdx = safe) }
             }
         }
-        persistProgress()
+        // 退出路径的落库必须不可取消：viewModelScope 会随页面销毁取消，
+        // 挂起的写任务若未执行会被丢弃 → 重开回到旧位置
+        val st = _ui.value
+        val book = st.book
+        val ch = st.chapters.getOrNull(st.chapterIdx)
+        val page = st.pages.getOrNull(st.pageIdx)
+        if (book != null && ch != null && page != null) {
+            kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                repo.saveProgress(book.id, st.chapterIdx, ch.charStart + page.start)
+            }
+        }
         if (readStartAt <= 0L) return
         val delta = System.currentTimeMillis() - readStartAt
         readStartAt = 0L
