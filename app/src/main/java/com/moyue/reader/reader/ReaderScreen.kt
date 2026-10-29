@@ -403,10 +403,12 @@ fun ReaderScreen(onBack: () -> Unit) {
                 }
             }
             // 亮度手势（菜单关闭时左半屏竖向拖动；翻页模式下生效）
-            .pointerInput(prefs.brightnessFollowSystem, ui.menuVisible) {
+            .pointerInput(prefs.brightnessFollowSystem, ui.menuVisible, prefs.readMode) {
                 detectVerticalDragGestures(
                     onDragStart = { pos ->
-                        if (!ui.menuVisible && pos.x < size.width * 0.5f) {
+                        // 滚动模式收窄到左 30%，减少与滚动手势的冲突
+                        val zone = if (prefs.readMode == ReadMode.SCROLL) 0.3f else 0.5f
+                        if (!ui.menuVisible && pos.x < size.width * zone) {
                             brightnessDragActive = true
                             brightnessStartY = pos.y
                             brightnessStartVal =
@@ -417,7 +419,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                     onVerticalDrag = { change, _ ->
                         if (brightnessDragActive) {
                             val v = (brightnessStartVal +
-                                (brightnessStartY - change.position.y) / (size.height * 0.7f))
+                                (change.position.y - brightnessStartY) / (size.height * 0.7f))
                                 .coerceIn(0.02f, 1f)
                             brightnessHud = v
                             activity?.window?.let { w ->
@@ -604,7 +606,7 @@ fun ReaderScreen(onBack: () -> Unit) {
                 .padding(horizontal = padH + 4.dp, vertical = 4.dp)
         )
 
-        // 亮度手势 HUD
+        // 亮度手势 HUD（下滑增亮；含「跟随系统」快捷按钮）
         brightnessHud?.let { v ->
             Surface(
                 shape = RoundedCornerShape(14.dp),
@@ -635,6 +637,26 @@ fun ReaderScreen(onBack: () -> Unit) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Text("${(v * 100).toInt()}%", fontSize = 10.sp, color = palette.menuText)
+                    if (!prefs.brightnessFollowSystem) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.brightness_follow_quick),
+                            fontSize = 10.sp,
+                            color = palette.secondary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    vm.updatePrefs { it.copy(brightnessFollowSystem = true) }
+                                    activity?.window?.let { w ->
+                                        w.attributes = w.attributes.also {
+                                            it.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                                        }
+                                    }
+                                    brightnessHud = null
+                                }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -866,21 +888,30 @@ private fun ScrollReaderContent(
         }
     }
 
+    // 进度恢复先行：恢复完成前跟踪不上报——
+    // 本组件仅在页表就绪后组合，跟踪流的初始值(0)会覆盖恢复页码，
+    // 该覆盖又会重启恢复协程并取消进行中的 scrollToItem → 重开落回章节顶部
+    var restored by remember { mutableStateOf(false) }
+
     // 进度跟踪：当前页 = 视口顶部可见的页（headerCount 变化需重启，否则映射偏移）
     LaunchedEffect(scrollState, ui.pages.size, headerCount) {
         snapshotFlow { scrollState.firstVisibleItemIndex }.collect { first ->
-            if (ui.pages.isNotEmpty()) {
+            if (restored && ui.pages.isNotEmpty()) {
                 vm.onPageSettled((first - headerCount).coerceIn(0, ui.pages.size - 1))
             }
         }
     }
-    // 进度恢复：分页完成或跳转后滚动到目标页
-    LaunchedEffect(ui.pages, ui.pageIdx, pageHeightPx) {
-        if (ui.pages.isNotEmpty() && pageHeightPx > 0 && !scrollState.isScrollInProgress) {
-            val target = headerCount + ui.pageIdx
-            if (scrollState.firstVisibleItemIndex != target) {
-                scrollState.scrollToItem(target)
+    // 进度恢复：分页完成或跳转后滚动到目标页（不 key pageIdx：跟踪写页码不得重启本协程）
+    LaunchedEffect(ui.pages, pageHeightPx, headerCount) {
+        if (ui.pages.isNotEmpty() && pageHeightPx > 0) {
+            if (!scrollState.isScrollInProgress) {
+                val target = headerCount + ui.pageIdx
+                if (scrollState.firstVisibleItemIndex != target) {
+                    scrollState.scrollToItem(target)
+                }
             }
+            // 用户在恢复前已开始触摸滚动：尊重用户手势，同样视为已就位
+            restored = true
         }
     }
 
