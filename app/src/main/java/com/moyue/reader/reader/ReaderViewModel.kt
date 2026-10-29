@@ -53,6 +53,8 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val chapters: List<ChapterEntity> = emptyList(),
         val chapterIdx: Int = 0,
         val chapterText: String = "",
+        /** chapterText 实际加载完成的章节号（-1=尚未加载；防"布局先到、文本未到"时空文本分页） */
+        val chapterLoadedIdx: Int = -1,
         val pages: List<PaginationEngine.Page> = emptyList(),
         val pageIdx: Int = 0,
         val loading: Boolean = true,
@@ -165,7 +167,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             _ui.update { it.copy(chapterIdx = safe, pages = emptyList(), pageIdx = 0, loading = true) }
             val text = repo.readChapterText(bookId, chapters[safe])
             val images = repo.imagesForChapter(bookId, safe)
-            _ui.update { it.copy(chapterText = text, images = images) }
+            _ui.update { it.copy(chapterText = text, images = images, chapterLoadedIdx = safe) }
             val s = spec
             if (s != null) {
                 paginate(s)
@@ -184,13 +186,16 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
 
     fun applySpec(newSpec: LayoutSpec) {
         spec = newSpec
-        if (_ui.value.chapters.isNotEmpty()) paginate(newSpec)
+        val st = _ui.value
+        // 章节文本未就绪时不分页：空文本会消费恢复偏移并播种占位页表（重开回到章节开头的根因）
+        if (st.chapters.isNotEmpty() && st.chapterLoadedIdx == st.chapterIdx) paginate(newSpec)
     }
 
     /** 兜底：pages 意外为空时按当前布局参数重排（保持阅读位置） */
     fun repaginate() {
         val s = spec ?: return
-        if (_ui.value.chapters.isNotEmpty()) paginate(s)
+        val st = _ui.value
+        if (st.chapters.isNotEmpty() && st.chapterLoadedIdx == st.chapterIdx) paginate(s)
     }
 
     /**
@@ -214,6 +219,12 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         layoutJob = viewModelScope.launch(Dispatchers.Default) {
             val st = _ui.value
             val text = st.chapterText
+            // 文本未加载完成（空文本但该章实际有内容）：直接返回。
+            // 否则会消费 pendingOffset 并写入占位页表，真实文本到达后回退到章节开头
+            val ch = st.chapters.getOrNull(st.chapterIdx)
+            if (text.isEmpty() && ch != null && ch.charEnd - ch.charStart > 1) {
+                return@launch
+            }
             val paint = TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 textSize = s.textSizePx
                 typeface = if (s.serif) Typeface.SERIF else Typeface.DEFAULT
