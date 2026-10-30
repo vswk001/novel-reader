@@ -6,6 +6,11 @@
     <!-- 应用内更新：下载完成后拉起系统安装器（Android 8+ 需用户授予「安装未知应用」） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- 动态注册接收器所需（Robolectric 环境显式声明；真机由 androidx 合并提供） -->
+    <permission
+        android:name="com.moyue.reader.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:protectionLevel="signature" />
+
     <application
         android:name=".MoyueApp"
         android:allowBackup="true"

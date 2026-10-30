@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -330,16 +331,21 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 
     // ---------- 阅读时长统计与退出进度 ----------
+    // 生命周期回调闭包只在首帧组合创建、不再重启：必须用 rememberUpdatedState
+    // 持有最新引用，否则闭包里永远是首帧的默认偏好（readMode=PAGE）——
+    // 滚动模式退出时按翻页模式取 pager 第 0 页保存 → 重开回到章节顶部
+    val latestUi by androidx.compose.runtime.rememberUpdatedState(ui)
+    val latestPrefs by androidx.compose.runtime.rememberUpdatedState(prefs)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         /** 退出时按用户"正在看"的页持久化（动画未落定的 settledPage 会落后一页） */
         fun visiblePage(): Int? {
-            if (ui.pages.isEmpty()) return null
-            return if (prefs.readMode == ReadMode.SCROLL) {
-                val header = if (ui.chapterIdx > 0) 1 else 0
-                (scrollState.firstVisibleItemIndex - header).coerceIn(0, ui.pages.size - 1)
+            if (latestUi.pages.isEmpty()) return null
+            return if (latestPrefs.readMode == ReadMode.SCROLL) {
+                val header = if (latestUi.chapterIdx > 0) 1 else 0
+                (scrollState.firstVisibleItemIndex - header).coerceIn(0, latestUi.pages.size - 1)
             } else {
-                pagerState.currentPage.coerceIn(0, ui.pages.size - 1)
+                pagerState.currentPage.coerceIn(0, latestUi.pages.size - 1)
             }
         }
         val observer = LifecycleEventObserver { _, event ->
@@ -935,6 +941,7 @@ private fun ScrollReaderContent(
                 Modifier
                     .fillMaxWidth()
                     .height(pageHeightDp)
+                    .testTag("sp-$idx")
             ) {
                 StaticPage(
                     text = ui.chapterText,
@@ -1238,10 +1245,13 @@ private fun ReaderFooter(
                 }
             }
         }
-        ContextCompat.registerReceiver(
-            context, receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        // 个别 ROM/测试环境对 NOT_EXPORTED 注册抛权限异常：电池显示可降级，不影响阅读
+        runCatching {
+            ContextCompat.registerReceiver(
+                context, receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
     LaunchedEffect(Unit) {

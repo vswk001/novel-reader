@@ -29,8 +29,8 @@ android {
         applicationId = "com.moyue.reader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 32
-        versionName = "1.12.1"
+        versionCode = 33
+        versionName = "1.12.2"
 
         // 检查更新源（构建期注入，运行时经 BuildConfig.UPDATE_FEED_URL 读取）
         buildConfigField("String", "UPDATE_FEED_URL", "\"$updateFeedUrl\"")
@@ -81,6 +81,11 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -116,4 +121,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }
