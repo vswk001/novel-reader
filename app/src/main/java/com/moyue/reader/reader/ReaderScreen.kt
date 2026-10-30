@@ -348,17 +348,31 @@ fun ReaderScreen(onBack: () -> Unit) {
                 pagerState.currentPage.coerceIn(0, latestUi.pages.size - 1)
             }
         }
+
+        /** 滚动模式：视口顶第一个可见字符（行级精度），取不到布局时返回 null 回退整页粒度 */
+        fun preciseCharOffset(): Int? {
+            val st = latestUi
+            if (st.pages.isEmpty() || latestPrefs.readMode != ReadMode.SCROLL) return null
+            val header = if (st.chapterIdx > 0) 1 else 0
+            val idx = (scrollState.firstVisibleItemIndex - header).coerceIn(0, st.pages.size - 1)
+            val page = st.pages[idx]
+            val px = scrollState.firstVisibleItemScrollOffset
+            if (px <= 0) return page.start
+            val layout = pageLayouts[page.start] ?: return null
+            val line = layout.getLineForVertical(px).coerceIn(0, layout.lineCount - 1)
+            return page.start + layout.getLineStart(line)
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> vm.onReaderVisible()
-                Lifecycle.Event.ON_PAUSE -> vm.onReaderHidden(visiblePage())
+                Lifecycle.Event.ON_PAUSE -> vm.onReaderHidden(visiblePage(), preciseCharOffset())
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            vm.onReaderHidden(visiblePage())
+            vm.onReaderHidden(visiblePage(), preciseCharOffset())
         }
     }
     LaunchedEffect(Unit) {
@@ -560,7 +574,8 @@ fun ReaderScreen(onBack: () -> Unit) {
                         onLayoutBuilt = { k, l ->
                             if (l != null) pageLayouts[k] = l else pageLayouts.remove(k)
                         },
-                        onSelectionDrag = { isStart, off -> setSelectionPoint(isStart, off) }
+                        onSelectionDrag = { isStart, off -> setSelectionPoint(isStart, off) },
+                        pageLayouts = pageLayouts
                     )
 
                     else -> HorizontalPager(
@@ -872,7 +887,8 @@ private fun ScrollReaderContent(
     imageDir: java.io.File? = null,
     selection: IntRange? = null,
     onLayoutBuilt: ((Int, StaticLayout?) -> Unit)? = null,
-    onSelectionDrag: ((Boolean, Int) -> Unit)? = null
+    onSelectionDrag: ((Boolean, Int) -> Unit)? = null,
+    pageLayouts: Map<Int, StaticLayout> = emptyMap()
 ) {
     val headerCount = if (hasPrev) 1 else 0
 
@@ -920,6 +936,22 @@ private fun ScrollReaderContent(
             scrollState.scrollToItem(target)
             withFrameNanos { } // 滚后再验证（部分机型需两帧才生效）
             attempt++
+        }
+        // 行级精确定位：恢复到保存字符所在行（视口顶与退出时完全一致）
+        val absRestore = ui.restoreOffset
+        if (absRestore != null && !scrollState.isScrollInProgress) {
+            val pageIdx = ui.pageIdx.coerceIn(0, ui.pages.size - 1)
+            ui.pages.getOrNull(pageIdx)?.let { pg ->
+                pageLayouts[pg.start]?.let { layout ->
+                    val rel = (absRestore - pg.start).coerceIn(0, (pg.end - pg.start).coerceAtLeast(0))
+                    val line = layout.getLineForOffset(rel).coerceIn(0, layout.lineCount - 1)
+                    scrollState.scrollToItem(headerCount + pageIdx, layout.getLineTop(line))
+                } ?: run {
+                    // 目标页布局尚未注册（极端时序）：页级定位兜底
+                    scrollState.scrollToItem(headerCount + pageIdx)
+                }
+            }
+            vm.clearRestoreOffset()
         }
         restored = true
     }

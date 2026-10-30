@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipe
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso
 import com.moyue.reader.data.importer.ChapterParser
@@ -82,6 +83,13 @@ class ScrollRestoreRoboTest {
         // 语义滚动到第 60 页（可靠、与手势时序无关）
         rule.onNode(hasScroll)
             .performScrollToNode(androidx.compose.ui.test.hasTestTag("sp-60"))
+        // 再滚入页面中部：制造"页已滚出一半"的场景（旧实现会回退到上一页开头）
+        rule.onNode(hasScroll).performTouchInput {
+            val fromY = height / 2f
+            val topCenter = androidx.compose.ui.geometry.Offset(width / 2f, fromY)
+            val endPt = androidx.compose.ui.geometry.Offset(width / 2f, fromY - 450f)
+            swipe(start = topCenter, end = endPt, durationMillis = 300)
+        }
         rule.runOnIdle {}
         Thread.sleep(600)
         rule.runOnIdle {}

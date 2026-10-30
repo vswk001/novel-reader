@@ -55,6 +55,8 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val chapterText: String = "",
         /** chapterText 实际加载完成的章节号（-1=尚未加载；防"布局先到、文本未到"时空文本分页） */
         val chapterLoadedIdx: Int = -1,
+        /** 一次性恢复目标（全书绝对字符偏移）：滚动模式据此做行级精确定位，应用后清除 */
+        val restoreOffset: Int? = null,
         val pages: List<PaginationEngine.Page> = emptyList(),
         val pageIdx: Int = 0,
         val loading: Boolean = true,
@@ -191,6 +193,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         if (st.chapters.isNotEmpty() && st.chapterLoadedIdx == st.chapterIdx) paginate(newSpec)
     }
 
+    /** 滚动模式行级恢复已应用（由恢复协程调用） */
+    fun clearRestoreOffset() {
+        _ui.update { if (it.restoreOffset == null) it else it.copy(restoreOffset = null) }
+    }
+
     /** 兜底：pages 意外为空时按当前布局参数重排（保持阅读位置） */
     fun repaginate() {
         val s = spec ?: return
@@ -253,7 +260,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             // 本次结果属于旧章节，必须丢弃——否则旧页表配新文本 = 页边界越界 → 整屏空白
             _ui.update { cur ->
                 if (cur.chapterIdx == st.chapterIdx && cur.chapterText == text) {
-                    cur.copy(pages = pages, pageIdx = idx, loading = false)
+                    cur.copy(pages = pages, pageIdx = idx, loading = false, restoreOffset = absOffset)
                 } else {
                     cur
                 }
@@ -274,7 +281,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val safe = page.coerceIn(0, st.pages.size - 1)
         // 页码未变不写库（滚动模式每帧都会上报当前页）
         if (safe == st.pageIdx) return
-        _ui.update { it.copy(pageIdx = safe) }
+        _ui.update { it.copy(pageIdx = safe, restoreOffset = null) }
         schedulePersist()
     }
 
@@ -640,7 +647,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         }
     }
 
-    fun onReaderHidden(visiblePage: Int? = null) {
+    fun onReaderHidden(visiblePage: Int? = null, preciseChar: Int? = null) {
         persistJob?.cancel()
         // 退出时以用户正在看的页为准（翻页动画未落定时 settledPage 落后，会少存一页）
         visiblePage?.let { p ->
@@ -651,14 +658,18 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             }
         }
         // 退出路径的落库必须不可取消：viewModelScope 会随页面销毁取消，
-        // 挂起的写任务若未执行会被丢弃 → 重开回到旧位置
+        // 挂起的写任务若未执行会被丢弃 → 重开回到旧位置。
+        // preciseChar：滚动模式行级精确位置（视口顶第一个可见字符），整页粒度回退
         val st = _ui.value
         val book = st.book
         val ch = st.chapters.getOrNull(st.chapterIdx)
-        val page = st.pages.getOrNull(st.pageIdx)
-        if (book != null && ch != null && page != null) {
-            kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-                repo.saveProgress(book.id, st.chapterIdx, ch.charStart + page.start)
+        if (book != null && ch != null) {
+            val char = preciseChar?.takeIf { it in ch.charStart until ch.charEnd }
+                ?: st.pages.getOrNull(st.pageIdx)?.let { ch.charStart + it.start }
+            if (char != null) {
+                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+                    repo.saveProgress(book.id, st.chapterIdx, char)
+                }
             }
         }
         if (readStartAt <= 0L) return
