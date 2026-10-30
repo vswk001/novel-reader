@@ -242,13 +242,19 @@ fun ReaderScreen(onBack: () -> Unit) {
     // ---------- 翻页（PAGE 模式用 Pager） ----------
     val pagerState = rememberPagerState(initialPage = 0) { ui.pages.size }
 
-    LaunchedEffect(pagerState, prefs.readMode) {
+    // 长生命周期闭包（pager 同步、生命周期回调）必须读最新状态：
+    // 首帧捕获的默认偏好（readMode=PAGE 等）在 DataStore 发射前是过期值
+    val latestUi by androidx.compose.runtime.rememberUpdatedState(ui)
+    val latestPrefs by androidx.compose.runtime.rememberUpdatedState(prefs)
+
+    LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            if (prefs.readMode == ReadMode.PAGE) vm.onPageSettled(page)
+            // latestPrefs：首帧默认值(PAGE)未更新前不得误上报翻页模式页码
+            if (latestPrefs.readMode == ReadMode.PAGE) vm.onPageSettled(page)
         }
     }
     LaunchedEffect(ui.pages, ui.pageIdx) {
-        if (prefs.readMode == ReadMode.PAGE && ui.pages.isNotEmpty() &&
+        if (latestPrefs.readMode == ReadMode.PAGE && ui.pages.isNotEmpty() &&
             pagerState.settledPage != ui.pageIdx &&
             !pagerState.isScrollInProgress
         ) {
@@ -331,11 +337,6 @@ fun ReaderScreen(onBack: () -> Unit) {
     }
 
     // ---------- 阅读时长统计与退出进度 ----------
-    // 生命周期回调闭包只在首帧组合创建、不再重启：必须用 rememberUpdatedState
-    // 持有最新引用，否则闭包里永远是首帧的默认偏好（readMode=PAGE）——
-    // 滚动模式退出时按翻页模式取 pager 第 0 页保存 → 重开回到章节顶部
-    val latestUi by androidx.compose.runtime.rememberUpdatedState(ui)
-    val latestPrefs by androidx.compose.runtime.rememberUpdatedState(prefs)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         /** 退出时按用户"正在看"的页持久化（动画未落定的 settledPage 会落后一页） */
@@ -360,7 +361,8 @@ fun ReaderScreen(onBack: () -> Unit) {
             val px = scrollState.firstVisibleItemScrollOffset
             if (px <= 0) return chStart + page.start
             val layout = pageLayouts[page.start] ?: return null
-            val line = layout.getLineForVertical(px).coerceIn(0, layout.lineCount - 1)
+            // +2px 容差：定位像素恰压行边界偏 1px 时，避免取到上一行（远小于最小行高）
+            val line = layout.getLineForVertical(px + 2).coerceIn(0, layout.lineCount - 1)
             return chStart + page.start + layout.getLineStart(line)
         }
         val observer = LifecycleEventObserver { _, event ->
@@ -938,20 +940,31 @@ private fun ScrollReaderContent(
             withFrameNanos { } // 滚后再验证（部分机型需两帧才生效）
             attempt++
         }
-        // 行级精确定位：恢复到保存字符所在行（视口顶与退出时完全一致）
+        // 行级精确定位：恢复到保存字符所在行（视口顶与退出时完全一致）。
+        // 目标页布局在滚动后的一帧内才组合注册：等待重试，超时才退回页顶兜底
         val absRestore = ui.restoreOffset
         if (absRestore != null && !scrollState.isScrollInProgress) {
             val pageIdx = ui.pageIdx.coerceIn(0, ui.pages.size - 1)
             ui.pages.getOrNull(pageIdx)?.let { pg ->
-                pageLayouts[pg.start]?.let { layout ->
+                var layout: StaticLayout? = null
+                var tries = 0
+                while (tries < 10 && !scrollState.isScrollInProgress) {
+                    layout = pageLayouts[pg.start]
+                    if (layout != null) break
+                    withFrameNanos { }
+                    tries++
+                }
+                if (layout != null) {
                     // absRestore 为全书绝对偏移：先减章起点再减页起点得页内字符
                     val chStart = ui.chapters.getOrNull(ui.chapterIdx)?.charStart ?: 0
                     val rel = (absRestore - chStart - pg.start)
                         .coerceIn(0, (pg.end - pg.start).coerceAtLeast(0))
-                    val line = layout.getLineForOffset(rel).coerceIn(0, layout.lineCount - 1)
+                    var line = layout.getLineForOffset(rel).coerceIn(0, layout.lineCount - 1)
+                    // rel 恰为某行行首（换行符歧义）时 getLineForOffset 可能返回上一行：校正到真正起始行
+                    while (line > 0 && layout.getLineStart(line) > rel) line--
                     scrollState.scrollToItem(headerCount + pageIdx, layout.getLineTop(line))
-                } ?: run {
-                    // 目标页布局尚未注册（极端时序）：页级定位兜底
+                } else {
+                    // 极端时序：页级定位兜底
                     scrollState.scrollToItem(headerCount + pageIdx)
                 }
             }

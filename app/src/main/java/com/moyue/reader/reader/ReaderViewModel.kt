@@ -106,6 +106,10 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     /** 进度写库防抖：滚动模式下 onPageSettled 高频触发，停顿后再落库 */
     private var persistJob: Job? = null
 
+    /** 退出时已按行级精确字符落库：onCleared 的页顶粒度兜底不得再覆盖 */
+    @Volatile
+    private var preciseExitSaved = false
+
     // ---- 阅读时长 ----
     private var readStartAt = 0L
 
@@ -134,8 +138,10 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
                 val old = _ui.value.prefs
                 _ui.update { it.copy(prefs = p) }
                 if (old != p && chaptersLoaded) {
-                    // 排版参数变化：保持当前阅读位置重排
-                    pendingOffset = currentCharOffset()
+                    // 排版参数变化：保持当前阅读位置重排。
+                    // 打开瞬间的首发射（默认→存储值）也走这里：不得用页顶粒度的
+                    // currentCharOffset 覆盖尚未消费的行级恢复目标
+                    pendingOffset = _ui.value.restoreOffset ?: currentCharOffset()
                     spec?.let { applySpec(it) }
                 }
             }
@@ -664,9 +670,11 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val book = st.book
         val ch = st.chapters.getOrNull(st.chapterIdx)
         if (book != null && ch != null) {
-            val char = preciseChar?.takeIf { it in ch.charStart until ch.charEnd }
+            val precise = preciseChar?.takeIf { it in ch.charStart until ch.charEnd }
+            val char = precise
                 ?: st.pages.getOrNull(st.pageIdx)?.let { ch.charStart + it.start }
             if (char != null) {
+                if (precise != null) preciseExitSaved = true
                 kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
                     repo.saveProgress(book.id, st.chapterIdx, char)
                 }
@@ -682,7 +690,10 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
 
     override fun onCleared() {
         persistJob?.cancel()
-        flushProgressNow(kotlinx.coroutines.GlobalScope)
+        // 退出回调（onReaderHidden）已按行级精确落库：此处页顶粒度兜底跳过，防止覆盖
+        if (!preciseExitSaved) {
+            flushProgressNow(kotlinx.coroutines.GlobalScope)
+        }
         val delta = if (readStartAt > 0L) System.currentTimeMillis() - readStartAt else 0L
         readStartAt = 0L
         if (delta > 0L) {
