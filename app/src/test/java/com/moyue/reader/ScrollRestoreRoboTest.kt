@@ -46,11 +46,16 @@ class ScrollRestoreRoboTest {
     @Before
     fun seedBook() {
         runBlocking {
-        // 一章约 19+ 页的长文本
-        val sb = StringBuilder("第一章 长章测试\n")
-        repeat(700) { i ->
-            sb.append("第").append(i).append("段 ").append("这是用于填充分页的测试正文，重复多次以形成足够的页数，内容本身无意义。")
-                .append("XYZQ").append(i).append("。\n")
+        // 多章节书：5 章；初始进度设在第 3 章（下标 2）中途——覆盖"非首章 + 带上一章头部项"的真实场景
+        val sb = StringBuilder()
+        val cn = listOf("一", "二", "三", "四", "五")
+        for (c in 1..5) {
+            sb.append("第").append(cn[c - 1]).append("章 第").append(c).append("号章节\n")
+            repeat(130) { i ->
+                sb.append("C").append(c).append("P").append(i).append(" ")
+                    .append("这是用于填充分页的测试正文，重复多次以形成足够的页数，内容本身无意义。")
+                    .append("XYZQ").append(i).append("。\n")
+            }
         }
         val text = TextNormalizer.normalize(sb.toString())
         val chapters = ChapterParser.parse(text)
@@ -60,6 +65,8 @@ class ScrollRestoreRoboTest {
         )
         Graph.bookRepository.writeBookFile(bookId, text)
         Graph.bookRepository.saveChapters(bookId, chapters, text)
+        // 模拟"读到第 3 章中部"
+        Graph.bookRepository.saveProgress(bookId, 2, chapters[2].charStart + 2000)
         Graph.settingsRepository.update { it.copy(readMode = ReadMode.SCROLL) }
         Graph.settingsRepository.prefs // 触发 DataStore 初始化
         }
@@ -82,7 +89,7 @@ class ScrollRestoreRoboTest {
         }
         // 语义滚动到第 60 页（可靠、与手势时序无关）
         rule.onNode(hasScroll)
-            .performScrollToNode(androidx.compose.ui.test.hasTestTag("sp-60"))
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag("sp-15"))
         // 再滚入页面中部：制造"页已滚出一半"的场景（旧实现会回退到上一页开头）
         rule.onNode(hasScroll).performTouchInput {
             val fromY = height / 2f
@@ -98,6 +105,8 @@ class ScrollRestoreRoboTest {
         Espresso.pressBack()
         Thread.sleep(1200)
         val offA = savedOffset()
+        val chList = runBlocking { Graph.bookRepository.listChapters(bookId) }
+        chList.forEach { println("SCROLLTEST ch[${it.idx}] ${it.charStart}..${it.charEnd} ${it.title}") }
         println("SCROLLTEST save-offset A = $offA")
 
         // 重开（不滚动）
@@ -110,11 +119,16 @@ class ScrollRestoreRoboTest {
         val offC = savedOffset()
         println("SCROLLTEST reopen-position C = $offC (chapterStart≈0)")
 
-        assertTrue("保存侧异常：退出后偏移 $offA 仍接近章节开头", offA > 3000)
         assertTrue(
-            "恢复侧异常：重开后停在 $offC（接近顶部），保存值为 $offA",
-            offC > offA - 3000
+            "保存侧异常：退出后偏移 $offA 未深入第 3 章",
+            offA > runBlocking { Graph.bookRepository.listChapters(bookId)[2].charStart } + 2000
         )
+        assertTrue(
+            "恢复侧行级精度异常：重开后停在 $offC，保存值为 $offA（差 ${offA - offC} 超过 1 行）",
+            offC > offA - 120
+        )
+        val b = runBlocking { Graph.bookRepository.getBook(bookId)!! }
+        assertTrue("章节丢失：当前第 ${b.curChapter} 章", b.curChapter == 2)
     }
 
     private fun settleReader(@Suppress("UNUSED_PARAMETER") rule: androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, MainActivity>) {

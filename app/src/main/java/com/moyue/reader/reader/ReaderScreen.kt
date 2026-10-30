@@ -349,18 +349,19 @@ fun ReaderScreen(onBack: () -> Unit) {
             }
         }
 
-        /** 滚动模式：视口顶第一个可见字符（行级精度），取不到布局时返回 null 回退整页粒度 */
+        /** 滚动模式：视口顶第一个可见字符（全书绝对偏移，行级精度），取不到布局时返回 null 回退整页粒度 */
         fun preciseCharOffset(): Int? {
             val st = latestUi
             if (st.pages.isEmpty() || latestPrefs.readMode != ReadMode.SCROLL) return null
+            val chStart = st.chapters.getOrNull(st.chapterIdx)?.charStart ?: 0
             val header = if (st.chapterIdx > 0) 1 else 0
             val idx = (scrollState.firstVisibleItemIndex - header).coerceIn(0, st.pages.size - 1)
             val page = st.pages[idx]
             val px = scrollState.firstVisibleItemScrollOffset
-            if (px <= 0) return page.start
+            if (px <= 0) return chStart + page.start
             val layout = pageLayouts[page.start] ?: return null
             val line = layout.getLineForVertical(px).coerceIn(0, layout.lineCount - 1)
-            return page.start + layout.getLineStart(line)
+            return chStart + page.start + layout.getLineStart(line)
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -943,7 +944,10 @@ private fun ScrollReaderContent(
             val pageIdx = ui.pageIdx.coerceIn(0, ui.pages.size - 1)
             ui.pages.getOrNull(pageIdx)?.let { pg ->
                 pageLayouts[pg.start]?.let { layout ->
-                    val rel = (absRestore - pg.start).coerceIn(0, (pg.end - pg.start).coerceAtLeast(0))
+                    // absRestore 为全书绝对偏移：先减章起点再减页起点得页内字符
+                    val chStart = ui.chapters.getOrNull(ui.chapterIdx)?.charStart ?: 0
+                    val rel = (absRestore - chStart - pg.start)
+                        .coerceIn(0, (pg.end - pg.start).coerceAtLeast(0))
                     val line = layout.getLineForOffset(rel).coerceIn(0, layout.lineCount - 1)
                     scrollState.scrollToItem(headerCount + pageIdx, layout.getLineTop(line))
                 } ?: run {
