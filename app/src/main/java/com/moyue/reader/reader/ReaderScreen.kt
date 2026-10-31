@@ -356,14 +356,25 @@ fun ReaderScreen(onBack: () -> Unit) {
             if (st.pages.isEmpty() || latestPrefs.readMode != ReadMode.SCROLL) return null
             val chStart = st.chapters.getOrNull(st.chapterIdx)?.charStart ?: 0
             val header = if (st.chapterIdx > 0) 1 else 0
+            // 顶部还停在「上一章」按钮内 = 处于章节最顶
+            if (header == 1 && scrollState.firstVisibleItemIndex == 0) {
+                return chStart + st.pages.first().start
+            }
             val idx = (scrollState.firstVisibleItemIndex - header).coerceIn(0, st.pages.size - 1)
             val page = st.pages[idx]
             val px = scrollState.firstVisibleItemScrollOffset
             if (px <= 0) return chStart + page.start
-            val layout = pageLayouts[page.start] ?: return null
-            // +2px 容差：定位像素恰压行边界偏 1px 时，避免取到上一行（远小于最小行高）
-            val line = layout.getLineForVertical(px + 2).coerceIn(0, layout.lineCount - 1)
-            return chStart + page.start + layout.getLineStart(line)
+            val layout = pageLayouts[page.start]
+            if (layout != null) {
+                // +2px 容差：定位像素恰压行边界偏 1px 时，避免取到上一行（远小于最小行高）
+                val line = layout.getLineForVertical(px + 2).coerceIn(0, layout.lineCount - 1)
+                return chStart + page.start + layout.getLineStart(line)
+            }
+            // 布局尚未注册（滚动刚停就退出的时序）：按页内比例插值，误差不超过一行，
+            // 绝不退回页顶（一页可达 20-30 行）
+            val span = (page.end - page.start).coerceAtLeast(1)
+            val ratio = (px.toFloat() / textAreaSize.height.coerceAtLeast(1)).coerceIn(0f, 1f)
+            return chStart + page.start + (span * ratio).toInt()
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -964,8 +975,12 @@ private fun ScrollReaderContent(
                     while (line > 0 && layout.getLineStart(line) > rel) line--
                     scrollState.scrollToItem(headerCount + pageIdx, layout.getLineTop(line))
                 } else {
-                    // 极端时序：页级定位兜底
-                    scrollState.scrollToItem(headerCount + pageIdx)
+                    // 极端时序（布局长时间未注册）：按比例插值定位页内像素，不落页顶
+                    val chStart2 = ui.chapters.getOrNull(ui.chapterIdx)?.charStart ?: 0
+                    val span = (pg.end - pg.start).coerceAtLeast(1)
+                    val rel2 = (absRestore - chStart2 - pg.start).coerceIn(0, span)
+                    val pxFrac = (rel2.toFloat() / span * pageHeightPx).toInt()
+                    scrollState.scrollToItem(headerCount + pageIdx, pxFrac)
                 }
             }
             vm.clearRestoreOffset()
@@ -1100,7 +1115,9 @@ fun StaticPage(
     }
     // 向上注册本页布局（长按命中测试/工具条定位用）
     onLayoutBuilt?.let { cb ->
-        androidx.compose.runtime.DisposableEffect(page.start) {
+        // key 含 layout：字号/行距重排后相同 page.start 会重建布局，必须重新注册，
+        // 否则注册表里留着旧字体度量 → 行级换算错位（间歇性偏移数行的来源之一）
+        androidx.compose.runtime.DisposableEffect(page.start, layout) {
             cb(page.start, layout)
             onDispose { cb(page.start, null) }
         }
