@@ -974,6 +974,7 @@ private fun ScrollReaderContent(
                     // rel 恰为某行行首（换行符歧义）时 getLineForOffset 可能返回上一行：校正到真正起始行
                     while (line > 0 && layout.getLineStart(line) > rel) line--
                     scrollState.scrollToItem(headerCount + pageIdx, layout.getLineTop(line))
+                    com.moyue.reader.data.repo.PosLog.log("RESTORE", "abs=", absRestore, "line=", line)
                 } else {
                     // 极端时序（布局长时间未注册）：按比例插值定位页内像素，不落页顶
                     val chStart2 = ui.chapters.getOrNull(ui.chapterIdx)?.charStart ?: 0
@@ -981,6 +982,7 @@ private fun ScrollReaderContent(
                     val rel2 = (absRestore - chStart2 - pg.start).coerceIn(0, span)
                     val pxFrac = (rel2.toFloat() / span * pageHeightPx).toInt()
                     scrollState.scrollToItem(headerCount + pageIdx, pxFrac)
+                    com.moyue.reader.data.repo.PosLog.log("RESTORE-FB", "abs=", absRestore, "px=", pxFrac)
                 }
             }
             vm.clearRestoreOffset()

@@ -301,4 +301,5 @@ Check your network, or open the release page below. (GitHub API is anonymous-onl
     <string name="update_ready_install">Download finished — tap Install</string>
     <string name="update_need_install_permission">Allow "Install unknown apps" for MoYue in the system page just opened, then tap Install again</string>
     <string name="brightness_follow_quick">Auto</string>
+    <string name="poslog_share">Share position log (debug)</string>
 </resources>

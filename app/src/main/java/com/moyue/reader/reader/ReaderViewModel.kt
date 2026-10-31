@@ -20,6 +20,7 @@ import com.moyue.reader.data.db.ChapterEntity
 import com.moyue.reader.data.db.HighlightEntity
 import com.moyue.reader.data.repo.BookRepository
 import com.moyue.reader.data.repo.ReaderPrefs
+import com.moyue.reader.data.repo.PosLog
 import com.moyue.reader.data.repo.SettingsRepository
 import com.moyue.reader.di.Graph
 import kotlinx.coroutines.Dispatchers
@@ -157,6 +158,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             )
         }
         pendingOffset = book.curCharOffset
+        PosLog.log("OPEN", "ch=", book.curChapter, "off=", book.curCharOffset)
         loadChapter(_ui.value.chapterIdx)
     }
 
@@ -259,6 +261,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             // 偏移是全书绝对值，页表是章节内相对值：必须换算后再定位
             val chapterStart = st.chapters.getOrNull(st.chapterIdx)?.charStart ?: 0
             val absOffset = pendingOffset ?: currentCharOffset()
+            PosLog.log("PAG", "in=", absOffset, "pend=", pendingOffset != null, "ch=", st.chapterIdx)
             pendingOffset = null
             val relOffset = (absOffset - chapterStart).coerceIn(0, text.length)
             val idx = PaginationEngine.indexOfOffset(pages, relOffset)
@@ -287,6 +290,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val safe = page.coerceIn(0, st.pages.size - 1)
         // 页码未变不写库（滚动模式每帧都会上报当前页）
         if (safe == st.pageIdx) return
+        PosLog.log("SETTLE", "p=", safe)
         _ui.update { it.copy(pageIdx = safe, restoreOffset = null) }
         schedulePersist()
     }
@@ -674,6 +678,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             val char = precise
                 ?: st.pages.getOrNull(st.pageIdx)?.let { ch.charStart + it.start }
             if (char != null) {
+                PosLog.log("EXIT", "vis=", visiblePage, "precise=", precise, "saved=", char, "pageIdx=", st.pageIdx)
                 if (precise != null) preciseExitSaved = true
                 kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
                     repo.saveProgress(book.id, st.chapterIdx, char)
@@ -692,6 +697,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         persistJob?.cancel()
         // 退出回调（onReaderHidden）已按行级精确落库：此处页顶粒度兜底跳过，防止覆盖
         if (!preciseExitSaved) {
+            PosLog.log("FLUSH", "pageIdx=", _ui.value.pageIdx)
             flushProgressNow(kotlinx.coroutines.GlobalScope)
         }
         val delta = if (readStartAt > 0L) System.currentTimeMillis() - readStartAt else 0L

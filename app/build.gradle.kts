@@ -29,8 +29,8 @@ android {
         applicationId = "com.moyue.reader"
         minSdk = 24
         targetSdk = 36
-        versionCode = 37
-        versionName = "1.12.6"
+        versionCode = 38
+        versionName = "1.12.7"
 
         // 检查更新源（构建期注入，运行时经 BuildConfig.UPDATE_FEED_URL 读取）
         buildConfigField("String", "UPDATE_FEED_URL", "\"$updateFeedUrl\"")

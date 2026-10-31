@@ -301,4 +301,5 @@
     <string name="update_ready_install">下载完成，点击安装</string>
     <string name="update_need_install_permission">请在刚打开的系统页面允许墨阅「安装未知应用」，然后返回再点安装</string>
     <string name="brightness_follow_quick">跟随系统</string>
+    <string name="poslog_share">导出定位日志（调试）</string>
 </resources>
