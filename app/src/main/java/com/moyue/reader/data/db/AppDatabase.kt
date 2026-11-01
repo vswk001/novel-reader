@@ -66,9 +66,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "moyue.db")
+        /**
+         * @param singleThread 测试引擎（Robolectric）下强制 Room 单线程执行器：
+         * 并发连接在其 SQLite 实现上会出现 "Illegal connection pointer"
+         */
+        fun build(context: Context, singleThread: Boolean = false): AppDatabase {
+            val b = Room.databaseBuilder(context, AppDatabase::class.java, "moyue.db")
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-                .build()
+            if (singleThread) {
+                val ex = java.util.concurrent.Executors.newSingleThreadExecutor()
+                b.setQueryExecutor(ex)
+                b.setTransactionExecutor(ex)
+            }
+            return b.build()
+        }
     }
 }

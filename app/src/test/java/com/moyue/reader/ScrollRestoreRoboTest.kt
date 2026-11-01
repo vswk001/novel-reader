@@ -16,6 +16,7 @@ import com.moyue.reader.data.repo.ReadMode
 import com.moyue.reader.di.Graph
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -42,6 +43,11 @@ class ScrollRestoreRoboTest {
     private val ctx get() = ApplicationProvider.getApplicationContext<Context>()
     private var bookId = 0L
     private val title = "滚动定位测试书"
+
+    @After
+    fun tearDownDb() {
+        Graph.resetForTest()
+    }
 
     @Before
     fun seedBook() {

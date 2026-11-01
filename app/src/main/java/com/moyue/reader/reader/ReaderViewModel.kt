@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -110,6 +111,10 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
     /** 退出时已按行级精确字符落库：onCleared 的页顶粒度兜底不得再覆盖 */
     @Volatile
     private var preciseExitSaved = false
+
+    /** 退出写库去重：一次会话只落一笔（暂停/销毁双回调并发写库在部分测试引擎上不安全） */
+    @Volatile
+    private var exitWriteQueued = false
 
     // ---- 阅读时长 ----
     private var readStartAt = 0L
@@ -271,6 +276,7 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
                 if (cur.chapterIdx == st.chapterIdx && cur.chapterText == text) {
                     cur.copy(pages = pages, pageIdx = idx, loading = false, restoreOffset = absOffset)
                 } else {
+                    PosLog.log("PAGDROP", "stCh=", st.chapterIdx, "curCh=", cur.chapterIdx, "sameText=", cur.chapterText == text)
                     cur
                 }
             }
@@ -326,8 +332,13 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         val st = _ui.value
         val book = st.book ?: return
         val ch = st.chapters.getOrNull(st.chapterIdx) ?: return
-        val page = st.pages.getOrNull(st.pageIdx) ?: return
-        scope.launch { repo.saveProgress(book.id, st.chapterIdx, ch.charStart + page.start) }
+        // 页顶粒度兜底会覆盖精确值：优先本次会话尚未消费的行级恢复目标
+        val pageChar = st.pages.getOrNull(st.pageIdx)?.let { ch.charStart + it.start } ?: return
+        val char = st.restoreOffset?.takeIf { it in ch.charStart until ch.charEnd } ?: pageChar
+        PosLog.log("FLUSH", "char=", char, "restore=", st.restoreOffset)
+        scope.launch(Dispatchers.IO) {
+            repo.saveProgress(book.id, st.chapterIdx, char)
+        }
     }
 
     fun prevChapter() {
@@ -669,17 +680,26 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         }
         // 退出路径的落库必须不可取消：viewModelScope 会随页面销毁取消，
         // 挂起的写任务若未执行会被丢弃 → 重开回到旧位置。
-        // preciseChar：滚动模式行级精确位置（视口顶第一个可见字符），整页粒度回退
+        // preciseChar：滚动模式行级精确位置（视口顶第一个可见字符）。
+        // vis 与 precise 双空 = 过期闭包（UI 从未组合/冻结）的回调：不得写库，
+        // 否则页顶兜底会覆盖此前已保存的精确值（真书取证定位的偶发偏移根因）
         val st = _ui.value
         val book = st.book
         val ch = st.chapters.getOrNull(st.chapterIdx)
         if (book != null && ch != null) {
             val precise = preciseChar?.takeIf { it in ch.charStart until ch.charEnd }
-            val char = precise
-                ?: st.pages.getOrNull(st.pageIdx)?.let { ch.charStart + it.start }
-            if (char != null) {
+            val fallbackPage = visiblePage?.let { v ->
+                st.pages.getOrNull(v.coerceIn(0, st.pages.size - 1))?.let { ch.charStart + it.start }
+            }
+            if (precise == null && fallbackPage == null) {
+                PosLog.log("EXIT-SKIP", "staleClosure pages=", st.pages.size)
+            } else if (exitWriteQueued) {
+                PosLog.log("EXIT-DUP-SKIP")
+            } else {
+                val char = precise ?: fallbackPage!!
                 PosLog.log("EXIT", "vis=", visiblePage, "precise=", precise, "saved=", char, "pageIdx=", st.pageIdx)
-                if (precise != null) preciseExitSaved = true
+                preciseExitSaved = true
+                exitWriteQueued = true
                 kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
                     repo.saveProgress(book.id, st.chapterIdx, char)
                 }
@@ -697,7 +717,6 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
         persistJob?.cancel()
         // 退出回调（onReaderHidden）已按行级精确落库：此处页顶粒度兜底跳过，防止覆盖
         if (!preciseExitSaved) {
-            PosLog.log("FLUSH", "pageIdx=", _ui.value.pageIdx)
             flushProgressNow(kotlinx.coroutines.GlobalScope)
         }
         val delta = if (readStartAt > 0L) System.currentTimeMillis() - readStartAt else 0L

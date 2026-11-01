@@ -341,7 +341,10 @@ fun ReaderScreen(onBack: () -> Unit) {
     DisposableEffect(lifecycleOwner) {
         /** 退出时按用户"正在看"的页持久化（动画未落定的 settledPage 会落后一页） */
         fun visiblePage(): Int? {
-            if (latestUi.pages.isEmpty()) return null
+            if (latestUi.pages.isEmpty()) {
+                com.moyue.reader.data.repo.PosLog.log("VISNULL", "pages=0 mode=", latestPrefs.readMode)
+                return null
+            }
             return if (latestPrefs.readMode == ReadMode.SCROLL) {
                 val header = if (latestUi.chapterIdx > 0) 1 else 0
                 (scrollState.firstVisibleItemIndex - header).coerceIn(0, latestUi.pages.size - 1)
@@ -939,6 +942,7 @@ private fun ScrollReaderContent(
     }
     // 进度恢复：分页完成或跳转后滚动到目标页（不 key pageIdx：跟踪写页码不得重启本协程）
     LaunchedEffect(ui.pages, pageHeightPx, headerCount) {
+        com.moyue.reader.data.repo.PosLog.log("RST0", "pages=", ui.pages.size, "ph=", pageHeightPx, "idx=", scrollState.firstVisibleItemIndex, "prog=", scrollState.isScrollInProgress)
         if (ui.pages.isEmpty() || pageHeightPx <= 0) return@LaunchedEffect
         val target = headerCount + ui.pageIdx
         // 等首帧布局完成后再滚：未测量的 LazyList 上 scrollToItem 可能被初始布局吞掉
