@@ -143,8 +143,13 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
             settings.prefs.collect { p ->
                 val old = _ui.value.prefs
                 _ui.update { it.copy(prefs = p) }
-                if (old != p && chaptersLoaded) {
-                    // 排版参数变化：保持当前阅读位置重排。
+                // 仅排版相关变化触发重排（排序/主题/开关等不重排，避免无谓的全章计算）
+                val layoutChanged = old.fontSp != p.fontSp ||
+                    old.lineSpacing != p.lineSpacing ||
+                    old.paddingH != p.paddingH ||
+                    old.paddingV != p.paddingV ||
+                    old.serif != p.serif
+                if (layoutChanged && chaptersLoaded) {
                     // 打开瞬间的首发射（默认→存储值）也走这里：不得用页顶粒度的
                     // currentCharOffset 覆盖尚未消费的行级恢复目标
                     pendingOffset = _ui.value.restoreOffset ?: currentCharOffset()
@@ -657,6 +662,9 @@ class ReaderViewModel(app: Application, savedState: SavedStateHandle) : AndroidV
 
     fun onReaderVisible() {
         readStartAt = System.currentTimeMillis()
+        // 从后台返回 = 新的一段阅读：退出写库去重标记必须复位，
+        // 否则本段阅读退出时不落库（丢进度）
+        exitWriteQueued = false
     }
 
     fun flushReadTime() {

@@ -927,6 +927,17 @@ private fun ScrollReaderContent(
         }
     }
 
+    // TTS 朗读翻页跟随：朗读推进 pageIdx 时滚动视口到朗读页。
+    // 不 key 恢复协程（不影响进度恢复）；用户手动滚动时 isScrollInProgress 抑制跟随
+    LaunchedEffect(ui.ttsRunning, ui.pageIdx, headerCount) {
+        if (ui.ttsRunning && ui.pages.isNotEmpty() && !scrollState.isScrollInProgress) {
+            val target = headerCount + ui.pageIdx
+            if (scrollState.firstVisibleItemIndex != target) {
+                scrollState.scrollToItem(target)
+            }
+        }
+    }
+
     // 进度恢复先行：恢复完成前跟踪不上报——
     // 本组件仅在页表就绪后组合，跟踪流的初始值(0)会覆盖恢复页码，
     // 该覆盖又会重启恢复协程并取消进行中的 scrollToItem → 重开落回章节顶部
