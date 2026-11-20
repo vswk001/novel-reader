@@ -73,6 +73,28 @@ object Graph {
     @Volatile
     var pendingImportUri: android.net.Uri? = null
 
+    // ---- ActivityResult 全局 launcher（Activity.onCreate 一次注册，每进程仅此一次；
+    //      避免 rememberLauncherForActivityResult 的注销/重注册循环累积请求码 → 16 位溢出闪退）----
+
+    @Volatile
+    var pickFilesLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
+    @Volatile
+    var pickFolderLauncher: androidx.activity.result.ActivityResultLauncher<android.net.Uri?>? = null
+    @Volatile
+    var exportBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>? = null
+    @Volatile
+    var importBackupLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
+
+    /** 结果回调桥：页面进入时挂接、离开时置空 */
+    @Volatile
+    var onFilesPicked: ((List<android.net.Uri>) -> Unit)? = null
+    @Volatile
+    var onFolderPicked: ((android.net.Uri) -> Unit)? = null
+    @Volatile
+    var onBackupExport: ((android.net.Uri) -> Unit)? = null
+    @Volatile
+    var onBackupImport: ((android.net.Uri) -> Unit)? = null
+
     fun init(context: Context) {
         appContext = context.applicationContext
     }

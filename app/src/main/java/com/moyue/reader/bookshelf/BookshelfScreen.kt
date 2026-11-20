@@ -108,12 +108,6 @@ import com.moyue.reader.ui.common.fmtSize
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-// ActivityResult contract 必须为稳定实例：内联构造（无 equals）会让
-// rememberLauncherForActivityResult 每次重组注销+重注册，requestCode 持续递增，
-// 累计超 16 位（65535）后 launch 必崩（IllegalArgumentException）
-private val openDocsContract = ActivityResultContracts.OpenMultipleDocuments()
-private val openTreeContract = ActivityResultContracts.OpenDocumentTree()
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookshelfScreen(
@@ -143,12 +137,14 @@ fun BookshelfScreen(
         bioChecked = Graph.privacyRepository.bioEnabled()
     }
 
-    val pickFiles = rememberLauncherForActivityResult(openDocsContract) { uris ->
-        vm.importUris(uris)
-    }
-
-    val pickTree = rememberLauncherForActivityResult(openTreeContract) { uri ->
-        uri?.let { vm.scanFolder(it) }
+    // 结果回调：页面活跃期间挂接（launcher 在 Activity.onCreate 一次注册，见 Graph）
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        Graph.onFilesPicked = { uris -> vm.importUris(uris) }
+        Graph.onFolderPicked = { uri -> vm.scanFolder(uri) }
+        onDispose {
+            Graph.onFilesPicked = null
+            Graph.onFolderPicked = null
+        }
     }
 
     // 系统「打开方式/分享」带入的文件：导入到普通书架（仅普通书架路由消费）
@@ -711,7 +707,7 @@ fun BookshelfScreen(
                 stringResource(R.string.import_pick_files_sub)
             ) {
                 showImportMenu = false
-                pickFiles.launch(arrayOf("text/*", "application/epub+zip", "application/octet-stream"))
+                Graph.pickFilesLauncher?.launch(arrayOf("text/*", "application/epub+zip", "application/octet-stream"))
             }
             ActionRow(
                 Icons.Filled.FolderOpen,
@@ -719,7 +715,7 @@ fun BookshelfScreen(
                 stringResource(R.string.import_scan_folder_sub)
             ) {
                 showImportMenu = false
-                pickTree.launch(null)
+                Graph.pickFolderLauncher?.launch(null as android.net.Uri?)
             }
             ActionRow(
                 Icons.Filled.Wifi,

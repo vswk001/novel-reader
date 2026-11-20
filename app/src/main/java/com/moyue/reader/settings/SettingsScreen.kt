@@ -70,10 +70,6 @@ import com.moyue.reader.ui.common.BookCover
 import com.moyue.reader.ui.common.fmtDateTime
 import kotlinx.coroutines.launch
 
-// 同 BookshelfScreen：稳定 contract 单例，防 requestCode 递增溢出
-private val createDocContract = ActivityResultContracts.CreateDocument("application/json")
-private val openDocContract = ActivityResultContracts.OpenDocument()
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
@@ -87,22 +83,27 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
         scope.launch { Graph.settingsRepository.update(transform) }
     }
 
-    val exportLauncher = rememberLauncherForActivityResult(createDocContract) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            Graph.backupManager.exportTo(uri)
-                .onSuccess { message = context.getString(R.string.msg_backup_ok, it) }
-                .onFailure { message = context.getString(R.string.msg_backup_fail, it.message ?: "") }
+    // 结果回调：页面活跃期间挂接（launcher 在 Activity.onCreate 一次注册，见 Graph）
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        Graph.onBackupExport = { uri ->
+            scope.launch {
+                Graph.backupManager.exportTo(uri)
+                    .onSuccess { message = context.getString(R.string.msg_backup_ok, it) }
+                    .onFailure { message = context.getString(R.string.msg_backup_fail, it.message ?: "") }
+            }
         }
-    }
-    val importLauncher = rememberLauncherForActivityResult(openDocContract) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            Graph.backupManager.importFrom(uri)
-                .onSuccess { (matched, merged) ->
-                    message = context.getString(R.string.msg_restore_ok, matched, merged)
-                }
-                .onFailure { message = context.getString(R.string.msg_restore_fail, it.message ?: "") }
+        Graph.onBackupImport = { uri ->
+            scope.launch {
+                Graph.backupManager.importFrom(uri)
+                    .onSuccess { (matched, merged) ->
+                        message = context.getString(R.string.msg_restore_ok, matched, merged)
+                    }
+                    .onFailure { message = context.getString(R.string.msg_restore_fail, it.message ?: "") }
+            }
+        }
+        onDispose {
+            Graph.onBackupExport = null
+            Graph.onBackupImport = null
         }
     }
 
@@ -333,12 +334,12 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(10.dp))
                 Row {
-                    Button(onClick = { exportLauncher.launch(BackupManager.suggestFileName()) }) {
+                    Button(onClick = { Graph.exportBackupLauncher?.launch(BackupManager.suggestFileName()) }) {
                         Text(stringResource(R.string.btn_export))
                     }
                     Spacer(Modifier.width(12.dp))
                     OutlinedButton(onClick = {
-                        importLauncher.launch(arrayOf("application/json"))
+                        Graph.importBackupLauncher?.launch(arrayOf("application/json"))
                     }) {
                         Text(stringResource(R.string.btn_import_backup))
                     }

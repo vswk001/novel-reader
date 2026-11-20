@@ -25,6 +25,26 @@ class MainActivity : FragmentActivity() {
         // 首次启动才处理外部打开/分享；系统回收后重建不重复导入
         if (savedInstanceState == null) handleExternalIntent(intent)
 
+        // ActivityResult 全局一次注册（每进程仅此一次）：
+        // rememberLauncherForActivityResult 在 Compose 中随组合生命周期注销/重注册，
+        // 请求码计数器单调递增，FragmentActivity 上限 16 位（65535）→ 溢出闪退
+        Graph.pickFilesLauncher = activityResultRegistry.register(
+            "moyue_pick_files",
+            androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
+        ) { uris -> Graph.onFilesPicked?.invoke(uris) }
+        Graph.pickFolderLauncher = activityResultRegistry.register(
+            "moyue_pick_folder",
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+        ) { uri -> uri?.let { Graph.onFolderPicked?.invoke(it) } }
+        Graph.exportBackupLauncher = activityResultRegistry.register(
+            "moyue_export_backup",
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
+        ) { uri -> uri?.let { Graph.onBackupExport?.invoke(it) } }
+        Graph.importBackupLauncher = activityResultRegistry.register(
+            "moyue_import_backup",
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri -> uri?.let { Graph.onBackupImport?.invoke(it) } }
+
         // 隐私模式：FLAG_SECURE 禁止截屏与最近任务预览，随设置实时生效
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
