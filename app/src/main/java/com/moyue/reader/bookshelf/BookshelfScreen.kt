@@ -108,6 +108,12 @@ import com.moyue.reader.ui.common.fmtSize
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+// ActivityResult contract 必须为稳定实例：内联构造（无 equals）会让
+// rememberLauncherForActivityResult 每次重组注销+重注册，requestCode 持续递增，
+// 累计超 16 位（65535）后 launch 必崩（IllegalArgumentException）
+private val openDocsContract = ActivityResultContracts.OpenMultipleDocuments()
+private val openTreeContract = ActivityResultContracts.OpenDocumentTree()
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookshelfScreen(
@@ -137,13 +143,13 @@ fun BookshelfScreen(
         bioChecked = Graph.privacyRepository.bioEnabled()
     }
 
-    val pickFiles = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris -> vm.importUris(uris) }
+    val pickFiles = rememberLauncherForActivityResult(openDocsContract) { uris ->
+        vm.importUris(uris)
+    }
 
-    val pickTree = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri -> uri?.let { vm.scanFolder(it) } }
+    val pickTree = rememberLauncherForActivityResult(openTreeContract) { uri ->
+        uri?.let { vm.scanFolder(it) }
+    }
 
     // 系统「打开方式/分享」带入的文件：导入到普通书架（仅普通书架路由消费）
     androidx.compose.runtime.LaunchedEffect(space) {

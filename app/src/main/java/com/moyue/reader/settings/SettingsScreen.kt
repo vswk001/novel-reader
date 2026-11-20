@@ -70,6 +70,10 @@ import com.moyue.reader.ui.common.BookCover
 import com.moyue.reader.ui.common.fmtDateTime
 import kotlinx.coroutines.launch
 
+// 同 BookshelfScreen：稳定 contract 单例，防 requestCode 递增溢出
+private val createDocContract = ActivityResultContracts.CreateDocument("application/json")
+private val openDocContract = ActivityResultContracts.OpenDocument()
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
@@ -83,9 +87,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
         scope.launch { Graph.settingsRepository.update(transform) }
     }
 
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
+    val exportLauncher = rememberLauncherForActivityResult(createDocContract) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
             Graph.backupManager.exportTo(uri)
@@ -93,9 +95,7 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                 .onFailure { message = context.getString(R.string.msg_backup_fail, it.message ?: "") }
         }
     }
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
+    val importLauncher = rememberLauncherForActivityResult(openDocContract) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
             Graph.backupManager.importFrom(uri)
