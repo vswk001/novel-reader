@@ -441,6 +441,26 @@ fun SettingsScreen(space: Int = 0, onBack: () -> Unit) {
                     lineHeight = 20.sp
                 )
                 Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(onClick = {
+                    val text = runCatching {
+                        java.io.File(context.filesDir, "crash.log").readText().takeLast(8000)
+                    }.getOrDefault("(no crash log)")
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent.createChooser(
+                                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                },
+                                null
+                            )
+                        )
+                    }
+                }) {
+                    Text(stringResource(R.string.crashlog_share))
+                }
+                Spacer(Modifier.height(4.dp))
                 OutlinedButton(onClick = {
                     val text = com.moyue.reader.data.repo.PosLog.dump().takeLast(6000)
                     runCatching {

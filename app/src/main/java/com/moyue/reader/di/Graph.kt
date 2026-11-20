@@ -27,18 +27,27 @@ object Graph {
     private var privacy: PrivacyRepository? = null
     private var transfer: TransferServer? = null
 
+    // @Synchronized：by lazy 的线程安全在改为可空 getter 时丢失，须补回
+    // （启动期 IO 线程清理回收站与主线程同时首次访问 → 两个 Room 实例 → SQLite 冲突闪退）
+    @get:Synchronized
     val database: AppDatabase
         get() = db ?: AppDatabase.build(appContext, singleThread = testSingleThreadDb).also { db = it }
+    @get:Synchronized
     val bookRepository: BookRepository
         get() = bookRepo ?: BookRepository(appContext, database, java.io.File(appContext.filesDir, "books")).also { bookRepo = it }
+    @get:Synchronized
     val settingsRepository: SettingsRepository
         get() = settings ?: SettingsRepository(appContext).also { settings = it }
+    @get:Synchronized
     val bookImporter: BookImporter
         get() = importer ?: BookImporter(appContext, bookRepository).also { importer = it }
+    @get:Synchronized
     val backupManager: BackupManager
         get() = backup ?: BackupManager(appContext, bookRepository, settingsRepository).also { backup = it }
+    @get:Synchronized
     val privacyRepository: PrivacyRepository
         get() = privacy ?: PrivacyRepository(appContext).also { privacy = it }
+    @get:Synchronized
     val transferServer: TransferServer
         get() = transfer ?: TransferServer(appContext.cacheDir) { f, n, s -> bookImporter.importFile(f, n, s) }.also { transfer = it }
 
