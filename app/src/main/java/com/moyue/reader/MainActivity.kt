@@ -19,15 +19,50 @@ import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
 
+    /**
+     * 请求码 16 位适配。
+     *
+     * androidx 的 ActivityResultRegistry 为每个 launcher 随机分配 65536..Int.MAX 的请求码，
+     * 并原样传给 Activity.startActivityForResult；而系统只接受低 16 位，否则抛
+     * IllegalArgumentException: Can only use lower 16 bits for requestCode（选择文件时闪退）。
+     *
+     * 做法是在 Activity 这一侧做双向映射：启动时把框架码换成自分配的小整数，
+     * 结果回来时再换回框架码交给 androidx 分发。注册表本身不可替换（getter 为 final）。
+     */
+    private val requestCodes = RequestCodeMapper()
+
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: android.os.Bundle?) {
+        super.startActivityForResult(intent, requestCodes.toSmall(requestCode), options)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun startActivityForResult(intent: Intent, requestCode: Int) {
+        super.startActivityForResult(intent, requestCodes.toSmall(requestCode))
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val frameworkCode = requestCodes.toFramework(requestCode)
+        if (frameworkCode != null) {
+            // 换回框架码，走 androidx 的结果分发
+            super.onActivityResult(frameworkCode, resultCode, data)
+        } else {
+            // 不是我们映射过的码（如三方可传入的小值）：原样交给系统
+            super.onActivityResult(requestCode, resultCode, data)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // 首次启动才处理外部打开/分享；系统回收后重建不重复导入
         if (savedInstanceState == null) handleExternalIntent(intent)
+        // 进程重建：恢复请求码映射，使选择器返回的迟到结果仍能路由回原 launcher
+        requestCodes.restore(savedInstanceState)
 
-        // ActivityResult 全局一次注册（每进程仅此一次）：
-        // rememberLauncherForActivityResult 在 Compose 中随组合生命周期注销/重注册，
-        // 请求码计数器单调递增，FragmentActivity 上限 16 位（65535）→ 溢出闪退
+        // ActivityResult 全局一次注册（每进程仅此一次）。
+        // 注意：请求码在 androidx 中是随机数（与注册次数无关），16 位问题由 requestCodes 映射解决；
+        // 此处一次注册只是为了避免 Compose 组合生命周期带来的无谓注销/重注册。
         Graph.pickFilesLauncher = activityResultRegistry.register(
             "moyue_pick_files",
             androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
@@ -71,6 +106,11 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleExternalIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        requestCodes.save(outState)
     }
 
     /** 系统「打开方式 / 分享到墨阅」：记录 Uri，书架页到达后导入普通书架 */
