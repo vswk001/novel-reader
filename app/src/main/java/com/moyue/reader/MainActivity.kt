@@ -27,7 +27,8 @@ class MainActivity : FragmentActivity() {
      * IllegalArgumentException: Can only use lower 16 bits for requestCode（选择文件时闪退）。
      *
      * 做法是在 Activity 这一侧做双向映射：启动时把框架码换成自分配的小整数，
-     * 结果回来时再换回框架码交给 androidx 分发。注册表本身不可替换（getter 为 final）。
+     * 结果回来时再换回框架码，直接交给 androidx 注册表分发（见 onActivityResult）。
+     * 注册表本身不可替换（getter 为 final）。
      */
     private val requestCodes = RequestCodeMapper()
 
@@ -43,11 +44,14 @@ class MainActivity : FragmentActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         val frameworkCode = requestCodes.toFramework(requestCode)
-        if (frameworkCode != null) {
-            // 换回框架码，走 androidx 的结果分发
-            super.onActivityResult(frameworkCode, resultCode, data)
+        if (frameworkCode != null && frameworkCode != requestCode) {
+            // 这是我们换过码的 launcher：直接交给 androidx 注册表分发，不能走 super。
+            // FragmentActivity.onActivityResult 把「请求码高 16 位非 0」当作 Fragment 的结果，
+            // 而 androidx 分配的框架码高 16 位几乎必然非 0 —— 走 super 会被它当作
+            // 「未知 Fragment 的结果」记一行 Log.w 后直接 return，静默丢弃。
+            activityResultRegistry.dispatchResult(frameworkCode, resultCode, data)
         } else {
-            // 不是我们映射过的码（如三方可传入的小值）：原样交给系统
+            // 未经映射的码（Fragment 结果、三方库直接使用的小整数等）：保持系统原有行为
             super.onActivityResult(requestCode, resultCode, data)
         }
     }
