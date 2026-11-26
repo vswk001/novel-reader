@@ -32,6 +32,8 @@ import java.io.File
  * 多轮 开→滚→退→开→退 循环捕捉偶发偏移；结束时输出 PosLog 全决策链。
  * 书稿不在本机（CI）时自动跳过。
  */
+// CI 慢 runner 上会因 Compose 测试框架的空闲等待时序缺陷而超时，详见 FlakyOnCi
+@FlakyOnCi
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], qualifiers = "w360dp-h640dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

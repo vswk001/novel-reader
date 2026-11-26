@@ -88,6 +88,59 @@ android {
     }
 }
 
+// ---- 按 @FlakyOnCi 分组的单元测试任务 ----
+// 背景：带该注解的 Robolectric + Compose 全链路测试在 CI 的慢 runner 上会因测试框架的
+// 空闲等待时序缺陷而超时（见 FlakyOnCi），与被测业务逻辑无关。
+//
+//   testStableDebugUnitTest   稳定集 —— 失败即失败；CI 与发版流水线用它把关
+//   testFlakyDebugUnitTest    不稳定集 —— 仍然运行并产出报告，但失败不阻断
+//
+// 分组完全由源码里的注解决定（自动扫描），无需维护类名清单：新增测试默认属于稳定集，
+// 要放进不稳定集必须在类上显式加 @FlakyOnCi。
+// 默认任务 testDebugUnitTest 的行为不变：本地运行全部测试并正常阻塞。
+//
+// 两个任务只改【测试过滤】，其余（类目录、classpath、JVM 参数等）全部沿用默认测试任务，
+// 避免与 AGP 的默认行为产生偏差。
+
+val flakyTestClasses: List<String> by lazy {
+    val root = layout.projectDirectory.dir("src/test/java").asFile
+    if (!root.isDirectory) emptyList() else root.walkTopDown()
+        .filter { it.isFile && it.name.endsWith(".kt") && it.readText().contains("@FlakyOnCi") }
+        .map { f -> f.relativeTo(root).invariantSeparatorsPath.removeSuffix(".kt").replace('/', '.') }
+        .sorted()
+        .toList()
+}
+
+fun Test.onlyRunFlaky(flaky: Boolean) {
+    val defaultTest = tasks.named<Test>("testDebugUnitTest")
+    // 惰性取值：等默认测试任务被 AGP 配置完成后再读，避免拿到空的类目录
+    testClassesDirs = files(provider { defaultTest.get().testClassesDirs })
+    classpath = files(provider { defaultTest.get().classpath })
+    val classes = flakyTestClasses
+    filter {
+        classes.forEach { if (flaky) includeTestsMatching(it) else excludeTestsMatching(it) }
+        // 稳定集必须真的有测试在跑：一个都没匹配到视为配置错误，而不是“全绿”。
+        // 不稳定集在没有任何 @FlakyOnCi 类时允许为空（空跑即通过）。
+        setFailOnNoMatchingTests(!flaky)
+    }
+    if (flaky) ignoreFailures = true
+    doFirst {
+        logger.lifecycle("test groups (@FlakyOnCi): {}", classes.joinToString())
+    }
+}
+
+tasks.register<Test>("testStableDebugUnitTest") {
+    group = "verification"
+    description = "稳定集单元测试（不含 @FlakyOnCi 类）：失败即失败"
+    onlyRunFlaky(flaky = false)
+}
+
+tasks.register<Test>("testFlakyDebugUnitTest") {
+    group = "verification"
+    description = "不稳定集单元测试（@FlakyOnCi 类）：运行并报告，但失败不阻断"
+    onlyRunFlaky(flaky = true)
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

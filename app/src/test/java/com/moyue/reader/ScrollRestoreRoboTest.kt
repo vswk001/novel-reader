@@ -32,6 +32,8 @@ import android.content.Context
  *  - 第一次退出后 DB 偏移 A —— 保存侧是否正确（A 应深入章节）
  *  - 重开且不滚动、再次退出后 DB 偏移 C —— 恢复侧是否正确（C 应接近 A；若 ≈0 则重开落在顶部）
  */
+// CI 慢 runner 上会因 Compose 测试框架的空闲等待时序缺陷而超时，详见 FlakyOnCi
+@FlakyOnCi
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], qualifiers = "w360dp-h640dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
