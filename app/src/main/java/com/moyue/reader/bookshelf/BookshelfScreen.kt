@@ -857,13 +857,7 @@ fun BookshelfScreen(
     }
 }
 
-private fun progressPercent(book: BookEntity): Int =
-    if (book.totalChars > 0) {
-        (((book.curChapter + 1) * 100L / book.chapterCount.coerceAtLeast(1))
-            .coerceIn(0L, 100L)).toInt()
-    } else {
-        0
-    }
+private fun progressPercent(book: BookEntity): Int = ReadingProgress.percent(book)
 
 @Composable
 private fun progressText(book: BookEntity): String {
